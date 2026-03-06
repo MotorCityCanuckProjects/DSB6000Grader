@@ -229,6 +229,14 @@ button:disabled {
     box-shadow: 0 5px 15px rgba(108, 117, 125, 0.4);
 }
 
+.btn-download {
+    background: linear-gradient(135deg, #1a6b3c, #145c32);
+}
+
+.btn-download:hover {
+    box-shadow: 0 5px 15px rgba(26, 107, 60, 0.4);
+}
+
 /* =============================================
    Loading Indicator
    ============================================= */

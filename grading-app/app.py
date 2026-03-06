@@ -1,10 +1,21 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, send_file
 import yaml
 import os
 import re
+from io import BytesIO
+from datetime import datetime
 from openai import OpenAI
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
+from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER, TA_LEFT
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
 
 app = Flask(__name__)
+
+# Store last grading result for PDF generation
+last_grading_result = {}
 
 def load_rubric():
     with open('rubric.yaml', 'r') as f:
@@ -112,6 +123,16 @@ FEEDBACK: [5-6 sentences of detailed, specific feedback. Include: what the stude
 
         total_possible = rubric['total_points']
 
+                # Store result for PDF generation
+        last_grading_result.update({
+            'student_name': student_name,
+            'word_count': word_count,
+            'grade': f'{total_score}/{total_possible}',
+            'feedback': feedback,
+            'criterion_feedback': criterion_feedback,
+            'timestamp': datetime.now().strftime('%B %d, %Y')
+        })
+
         return jsonify({
             'student_name': student_name,
             'word_count': word_count,
@@ -122,6 +143,151 @@ FEEDBACK: [5-6 sentences of detailed, specific feedback. Include: what the stude
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/download-pdf', methods=['GET'])
+def download_pdf():
+    if not last_grading_result:
+        return jsonify({'error': 'No grading result available. Please grade a paper first.'}), 400
+
+    try:
+        buffer = BytesIO()
+        generate_pdf(buffer, last_grading_result)
+        buffer.seek(0)
+
+        student_name = last_grading_result['student_name']
+        filename = f"{student_name}-Ethics Paper.pdf"
+
+        return send_file(
+            buffer,
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=filename
+        )
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+def generate_pdf(buffer, data):
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=letter,
+        rightMargin=72, leftMargin=72,
+        topMargin=72, bottomMargin=72
+    )
+
+    styles = getSampleStyleSheet()
+
+    title_style = ParagraphStyle(
+        'Title',
+        parent=styles['Heading1'],
+        fontSize=22,
+        textColor=colors.HexColor('#1a1a2e'),
+        alignment=TA_CENTER,
+        spaceAfter=6,
+        fontName='Helvetica-Bold'
+    )
+    subtitle_style = ParagraphStyle(
+        'Subtitle',
+        parent=styles['Normal'],
+        fontSize=12,
+        textColor=colors.HexColor('#0f3460'),
+        alignment=TA_CENTER,
+        spaceAfter=20,
+        fontName='Helvetica'
+    )
+    heading_style = ParagraphStyle(
+        'Heading',
+        parent=styles['Heading2'],
+        fontSize=14,
+        textColor=colors.HexColor('#0f3460'),
+        spaceBefore=16,
+        spaceAfter=8,
+        fontName='Helvetica-Bold'
+    )
+    subheading_style = ParagraphStyle(
+        'SubHeading',
+        parent=styles['Heading3'],
+        fontSize=12,
+        textColor=colors.HexColor('#1a1a2e'),
+        spaceBefore=10,
+        spaceAfter=4,
+        fontName='Helvetica-Bold'
+    )
+    body_style = ParagraphStyle(
+        'Body',
+        parent=styles['BodyText'],
+        fontSize=10,
+        leading=15,
+        spaceAfter=8,
+        fontName='Helvetica'
+    )
+
+    elements = []
+
+    # Title
+    elements.append(Paragraph('Data Science Ethics', title_style))
+    elements.append(Paragraph('Graduate Paper Grading Report', subtitle_style))
+    elements.append(HRFlowable(width='100%', thickness=2, color=colors.HexColor('#0f3460')))
+    elements.append(Spacer(1, 0.2 * inch))
+
+    # Student info table
+    info_data = [
+        ['Student Name:', data['student_name']],
+        ['Grading Date:', data['timestamp']],
+        ['Word Count:', f"{data['word_count']:,} words"],
+        ['Overall Score:', data['grade']],
+    ]
+    info_table = Table(info_data, colWidths=[2 * inch, 4 * inch])
+    info_table.setStyle(TableStyle([
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+        ('FONTNAME', (1, 0), (1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 0), (-1, -1), 11),
+        ('TEXTCOLOR', (0, 0), (0, -1), colors.HexColor('#0f3460')),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
+    ]))
+    elements.append(info_table)
+    elements.append(Spacer(1, 0.2 * inch))
+
+    # Grade highlight box
+    grade_data = [['Overall Score', data['grade']]]
+    grade_table = Table(grade_data, colWidths=[3 * inch, 3 * inch])
+    grade_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#1a1a2e')),
+        ('TEXTCOLOR', (0, 0), (-1, -1), colors.white),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 14),
+        ('TOPPADDING', (0, 0), (-1, -1), 12),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
+        ('ROUNDEDCORNERS', [5, 5, 5, 5]),
+    ]))
+    elements.append(grade_table)
+    elements.append(Spacer(1, 0.2 * inch))
+    elements.append(HRFlowable(width='100%', thickness=1, color=colors.HexColor('#cccccc')))
+
+    # Overall feedback
+    elements.append(Paragraph('Overall Feedback', heading_style))
+    for para in data['feedback'].split('\n'):
+        if para.strip():
+            elements.append(Paragraph(para.strip(), body_style))
+    elements.append(Spacer(1, 0.1 * inch))
+    elements.append(HRFlowable(width='100%', thickness=1, color=colors.HexColor('#cccccc')))
+
+    # Criterion breakdown
+    elements.append(Paragraph('Criterion Breakdown', heading_style))
+    for criterion in data['criterion_feedback']:
+        elements.append(Paragraph(
+            f"{criterion['name']}  —  {criterion['score']} / {criterion['points']} pts",
+            subheading_style
+        ))
+        for para in criterion['feedback'].split('\n'):
+            if para.strip():
+                elements.append(Paragraph(para.strip(), body_style))
+        elements.append(Spacer(1, 0.05 * inch))
+
+    doc.build(elements)
 
 if __name__ == '__main__':
     print('\n' + '='*60)

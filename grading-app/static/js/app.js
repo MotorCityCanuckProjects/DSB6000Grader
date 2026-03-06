@@ -110,3 +110,42 @@ function disableButtons(disabled) {
     document.getElementById('grade-btn').disabled = disabled;
     document.getElementById('clear-btn').disabled = disabled;
 }
+
+async function downloadPDF() {
+    const btn = document.getElementById('download-pdf-btn');
+    btn.disabled = true;
+    btn.textContent = 'Generating PDF...';
+
+    try {
+        const response = await fetch('/api/download-pdf');
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Failed to generate PDF.');
+        }
+
+        // Get filename from Content-Disposition header
+        const disposition = response.headers.get('Content-Disposition');
+        let filename = 'grading-report.pdf';
+        if (disposition && disposition.includes('filename=')) {
+            filename = disposition.split('filename=')[1].replace(/"/g, '').trim();
+        }
+
+        // Trigger download
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+
+    } catch (error) {
+        alert('Error downloading PDF: ' + error.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '&#8595; Download PDF';
+    }
+}
