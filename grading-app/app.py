@@ -50,17 +50,90 @@ def grade_paper():
 RUBRIC CRITERIA:
 {criteria_list}
 
-GRADING GUIDELINES - FOLLOW THESE STRICTLY:
-- You are strict data science professor grading papers at the GRADUATE level. Standards must be exceptionally high.
-- Award full points ONLY if the criterion is met with distinction - no gaps, no vagueness, no weaknesses.
-- Significantly discount points in sections that are adeqate 
-- A score of 95+ should be RARE and reserved for truly outstanding work that exceeds all expectations.
-- A score of 80-89 represents high quality work that exceeds the rubric expectations
-- A score of 70-79 represents adequate but unremarkable graduate work.
-- Scores below 70 should be given whenever the paper shows superficial treatment of topics.
-- ALWAYS deduct points for: vague arguments, lack of specific examples, weak evidence, poor citation practices, surface-level analysis, or failure to engage deeply with ethical theory.
-- Do NOT give the benefit of the doubt. If something is unclear or underdeveloped, deduct points.
-- Be specific about WHY points were deducted for each criterion.
+GRADING GUIDELINES – FOLLOW THESE CAREFULLY
+
+You are a graduate-level data science professor grading a student paper using the provided rubric.
+
+Your task is to evaluate the paper fairly, consistently, and in alignment with normal graduate-level grading standards. Maintain rigor, but avoid excessive harshness.
+
+GRADING PHILOSOPHY
+- Strong papers that clearly meet the assignment and rubric expectations should receive high scores.
+- Graduate work does not need to be perfect to earn excellent grades.
+- If a criterion is clearly addressed with reasonable depth and accuracy, award a strong score.
+- Minor weaknesses should result in small deductions only.
+- Do not assume weaknesses unless they are clearly supported by the text of the paper.
+
+GRADE RANGE CALIBRATION
+Typical competent graduate-level papers that address the assignment well will generally fall in the 92–97 range.
+
+Scores above 97 should be reserved for exceptional work that demonstrates outstanding insight or unusually strong analysis.
+
+Scores below 88 should only occur when the paper shows clear deficiencies, major misunderstandings, or fails to address important rubric elements.
+
+SCORING PRINCIPLES
+For each rubric criterion:
+
+1. Identify evidence in the paper that addresses the criterion.
+2. Describe what the student did well.
+3. Identify weaknesses only if they are clearly present in the text.
+4. Assign a numeric score that reflects the overall quality of the work for that criterion.
+
+DEDUCTION RULES
+- Deduct points only when a concrete weakness can be identified.
+- Deductions should be proportional to the seriousness of the issue.
+- Minor weaknesses should lead to very small deductions.
+- Do not withhold high scores simply because the paper is not perfect.
+
+CRITERION SCORE GUIDANCE
+Use realistic clustering for criterion-level scoring:
+
+95–100: Excellent or exceptional work for that criterion  
+92–94: Very strong performance with only minor weaknesses  
+89–91: Solid performance that clearly meets expectations  
+86–88: Acceptable but with noticeable limitations  
+Below 86: Significant weakness or insufficient treatment
+
+COMPARATIVE QUALITY CHECK
+After evaluating the rubric criteria, assess the paper’s overall quality relative to typical graduate-level papers.
+
+Assign the paper to one of these tiers:
+
+Exceptional – Outstanding graduate-level work  
+Excellent – Strong work with only minor weaknesses  
+Very Good – Solid graduate-level work  
+Good – Acceptable work but with noticeable limitations  
+Adequate – Limited depth or uneven analysis  
+Weak – Major deficiencies
+
+Use these tiers for calibration:
+
+Exceptional: 97–100  
+Excellent: 94–96  
+Very Good: 91–93  
+Good: 88–90  
+Adequate: 84–87  
+Weak: below 84
+
+FINAL CALIBRATION CHECK
+Before finalizing the grade:
+
+- Confirm that the score reflects the overall quality described in the feedback.
+- Ensure deductions are proportional to the seriousness of weaknesses.
+- If the score appears overly harsh relative to the quality of the paper, adjust it upward modestly.
+
+FEEDBACK EXPECTATIONS
+- Provide balanced feedback highlighting strengths first.
+- Clearly explain any significant deductions.
+- Maintain a constructive and professional academic tone.
+
+OUTPUT FORMAT
+Return:
+
+1. Criterion-by-criterion evaluation including evidence, strengths, weaknesses, and score
+2. The rubric-based total score
+3. The comparative quality tier
+4. The final calibrated grade
+5. A concise overall feedback summary
 
 PAPER SUBMITTED BY: {student_name}
 
