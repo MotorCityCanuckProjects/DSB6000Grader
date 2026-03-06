@@ -156,7 +156,7 @@ def download_pdf():
         buffer.seek(0)
 
         student_name = last_grading_result['student_name']
-        filename = f"{student_name}-Ethics Paper.pdf"
+        filename = f"{student_name}-Ethics Paper Feedback.pdf"
 
         return send_file(
             buffer,
