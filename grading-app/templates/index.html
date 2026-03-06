@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Science Ethics - Paper Grading System</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>&#127979; Data Science Ethics</h1>
+        <p class="subtitle">Graduate Paper Grading System</p>
+    </header>
+
+    <div class="panels">
+
+        <!-- Left Panel: Rubric -->
+        <div class="panel panel-left">
+            <h2>Grading Rubric</h2>
+            {% for criterion in rubric.criteria %}
+            <div class="rubric-item">
+                <div class="rubric-header">
+                    <h3>{{ criterion.name }}</h3>
+                    <span class="points-badge">{{ criterion.points }} pts</span>
+                </div>
+                <p class="rubric-description">{{ criterion.description }}</p>
+            </div>
+            {% endfor %}
+            <div class="rubric-total">
+                <span>Total Points</span>
+                <span class="total-points">{{ rubric.total_points }}</span>
+            </div>
+        </div>
+
+        <!-- Right Panel: Paper Submission -->
+        <div class="panel panel-right">
+            <h2>Submit Paper for Grading</h2>
+
+            <div class="form-group">
+                <label for="student-name">Student Name</label>
+                <input type="text" id="student-name" placeholder="Enter student name" />
+            </div>
+
+            <div class="form-group">
+                <label for="paper-text">Paper Text</label>
+                <textarea id="paper-text" placeholder="Paste the student paper here..."></textarea>
+            </div>
+
+            <div class="button-row">
+                <button id="grade-btn" onclick="gradePaper()">Grade Paper</button>
+                <button id="clear-btn" class="btn-secondary" onclick="clearForm()">Clear</button>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Loading Indicator -->
+    <div id="loading" class="loading hidden">
+        <div class="spinner"></div>
+        <p>Grading paper, please wait...</p>
+    </div>
+
+    <!-- Results Section -->
+    <div id="results" class="results hidden">
+        <h2>Grading Results</h2>
+
+        <div class="results-summary">
+            <div class="summary-card">
+                <span class="summary-label">Student</span>
+                <span class="summary-value" id="result-student-name">--</span>
+            </div>
+            <div class="summary-card highlight">
+                <span class="summary-label">Overall Grade</span>
+                <span class="summary-value grade-value" id="grade-value">--</span>
+            </div>
+            <div class="summary-card">
+                <span class="summary-label">Word Count</span>
+                <span class="summary-value" id="word-count">--</span>
+            </div>
+        </div>
+
+        <div class="feedback-section">
+            <h3>Overall Feedback</h3>
+            <p id="evaluation-text" class="feedback-text"></p>
+        </div>
+
+        <div class="criteria-section">
+            <h3>Criterion Breakdown</h3>
+            <div id="criterion-feedback"></div>
+        </div>
+
+        <div class="button-row">
+            <button class="btn-secondary" onclick="clearForm()">&#8635; Grade Another Paper</button>
+        </div>
+    </div>
+
+</div>
+
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

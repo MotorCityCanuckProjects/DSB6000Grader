@@ -1,0 +1,413 @@
+/* =============================================
+   Base & Reset
+   ============================================= */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Merriweather:wght@400;700&display=swap');
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Inter', sans-serif;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    min-height: 100vh;
+    padding: 30px 20px;
+    color: #333;
+}
+
+/* =============================================
+   Layout
+   ============================================= */
+.container {
+    max-width: 1300px;
+    margin: 0 auto;
+}
+
+/* =============================================
+   Header
+   ============================================= */
+header {
+    text-align: center;
+    margin-bottom: 35px;
+}
+
+header h1 {
+    font-family: 'Merriweather', serif;
+    font-size: 2.4em;
+    color: #ffffff;
+    text-shadow: 2px 2px 8px rgba(0,0,0,0.4);
+    margin-bottom: 8px;
+}
+
+header .subtitle {
+    font-size: 1.1em;
+    color: #a8c0e0;
+    font-weight: 300;
+    letter-spacing: 1px;
+}
+
+/* =============================================
+   Two Panel Layout
+   ============================================= */
+.panels {
+    display: grid;
+    grid-template-columns: 1fr 1.6fr;
+    gap: 25px;
+    margin-bottom: 25px;
+}
+
+.panel {
+    background: #ffffff;
+    border-radius: 12px;
+    padding: 28px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+}
+
+.panel h2 {
+    font-family: 'Merriweather', serif;
+    font-size: 1.3em;
+    color: #1a1a2e;
+    border-bottom: 3px solid #0f3460;
+    padding-bottom: 12px;
+    margin-bottom: 20px;
+}
+
+/* =============================================
+   Rubric Panel
+   ============================================= */
+.rubric-item {
+    background: #f4f7fb;
+    border-left: 4px solid #0f3460;
+    border-radius: 6px;
+    padding: 14px 16px;
+    margin-bottom: 12px;
+}
+
+.rubric-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.rubric-header h3 {
+    font-size: 0.95em;
+    font-weight: 600;
+    color: #1a1a2e;
+}
+
+.points-badge {
+    background: #0f3460;
+    color: #ffffff;
+    font-size: 0.8em;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 20px;
+    white-space: nowrap;
+}
+
+.rubric-description {
+    font-size: 0.85em;
+    color: #555;
+    line-height: 1.5;
+}
+
+.rubric-total {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 16px;
+    padding: 12px 16px;
+    background: #0f3460;
+    border-radius: 6px;
+    color: #ffffff;
+    font-weight: 600;
+    font-size: 0.95em;
+}
+
+.total-points {
+    font-size: 1.2em;
+}
+
+/* =============================================
+   Submission Panel
+   ============================================= */
+.form-group {
+    margin-bottom: 18px;
+}
+
+.form-group label {
+    display: block;
+    font-size: 0.9em;
+    font-weight: 600;
+    color: #1a1a2e;
+    margin-bottom: 7px;
+}
+
+.form-group input[type="text"] {
+    width: 100%;
+    padding: 11px 14px;
+    border: 2px solid #dde3ed;
+    border-radius: 7px;
+    font-size: 0.95em;
+    font-family: 'Inter', sans-serif;
+    transition: border-color 0.25s;
+    color: #333;
+}
+
+.form-group input[type="text"]:focus {
+    outline: none;
+    border-color: #0f3460;
+}
+
+.form-group textarea,
+textarea {
+    width: 100%;
+    min-height: 380px;
+    padding: 14px;
+    border: 2px solid #dde3ed;
+    border-radius: 7px;
+    font-size: 0.9em;
+    font-family: 'Inter', sans-serif;
+    line-height: 1.6;
+    resize: vertical;
+    transition: border-color 0.25s;
+    color: #333;
+}
+
+.form-group textarea:focus,
+textarea:focus {
+    outline: none;
+    border-color: #0f3460;
+}
+
+/* =============================================
+   Buttons
+   ============================================= */
+.button-row {
+    display: flex;
+    gap: 12px;
+    margin-top: 16px;
+}
+
+button {
+    padding: 12px 28px;
+    border: none;
+    border-radius: 7px;
+    font-size: 0.95em;
+    font-weight: 600;
+    font-family: 'Inter', sans-serif;
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+    background: linear-gradient(135deg, #0f3460, #1a1a2e);
+    color: #ffffff;
+}
+
+button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(15, 52, 96, 0.4);
+}
+
+button:active {
+    transform: translateY(0);
+}
+
+button:disabled {
+    background: #aaa;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+.btn-secondary {
+    background: #6c757d;
+}
+
+.btn-secondary:hover {
+    box-shadow: 0 5px 15px rgba(108, 117, 125, 0.4);
+}
+
+/* =============================================
+   Loading Indicator
+   ============================================= */
+.loading {
+    text-align: center;
+    padding: 30px;
+    color: #ffffff;
+    font-size: 1.1em;
+}
+
+.spinner {
+    border: 5px solid rgba(255,255,255,0.3);
+    border-top: 5px solid #ffffff;
+    border-radius: 50%;
+    width: 48px;
+    height: 48px;
+    animation: spin 0.9s linear infinite;
+    margin: 0 auto 16px auto;
+}
+
+@keyframes spin {
+    0%   { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* =============================================
+   Results Section
+   ============================================= */
+.results {
+    background: #ffffff;
+    border-radius: 12px;
+    padding: 30px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+    margin-bottom: 25px;
+}
+
+.results h2 {
+    font-family: 'Merriweather', serif;
+    font-size: 1.4em;
+    color: #1a1a2e;
+    border-bottom: 3px solid #0f3460;
+    padding-bottom: 12px;
+    margin-bottom: 24px;
+}
+
+.results h3 {
+    font-size: 1.05em;
+    font-weight: 600;
+    color: #1a1a2e;
+    margin-bottom: 14px;
+}
+
+/* Summary Cards */
+.results-summary {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 28px;
+}
+
+.summary-card {
+    background: #f4f7fb;
+    border-radius: 10px;
+    padding: 18px 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 8px;
+    border: 2px solid #dde3ed;
+}
+
+.summary-card.highlight {
+    background: linear-gradient(135deg, #0f3460, #1a1a2e);
+    border-color: #0f3460;
+}
+
+.summary-label {
+    font-size: 0.8em;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: #666;
+}
+
+.summary-card.highlight .summary-label {
+    color: #a8c0e0;
+}
+
+.summary-value {
+    font-size: 1.5em;
+    font-weight: 700;
+    color: #1a1a2e;
+}
+
+.summary-card.highlight .summary-value {
+    color: #ffffff;
+}
+
+.grade-value {
+    font-size: 2.2em;
+}
+
+/* Feedback Section */
+.feedback-section {
+    background: #f4f7fb;
+    border-left: 4px solid #0f3460;
+    border-radius: 6px;
+    padding: 18px 20px;
+    margin-bottom: 24px;
+}
+
+.feedback-text {
+    font-size: 0.95em;
+    line-height: 1.8;
+    color: #444;
+}
+
+/* Criterion Breakdown */
+.criteria-section {
+    margin-bottom: 24px;
+}
+
+.criterion-card {
+    background: #f4f7fb;
+    border-radius: 8px;
+    padding: 16px 18px;
+    margin-bottom: 12px;
+    border-left: 4px solid #0f3460;
+}
+
+.criterion-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.criterion-card-header h4 {
+    font-size: 0.95em;
+    font-weight: 600;
+    color: #1a1a2e;
+}
+
+.criterion-score {
+    background: #0f3460;
+    color: #ffffff;
+    font-size: 0.85em;
+    font-weight: 600;
+    padding: 3px 12px;
+    border-radius: 20px;
+}
+
+.criterion-card p {
+    font-size: 0.88em;
+    color: #555;
+    line-height: 1.6;
+}
+
+/* =============================================
+   Utility
+   ============================================= */
+.hidden {
+    display: none;
+}
+
+/* =============================================
+   Responsive
+   ============================================= */
+@media (max-width: 900px) {
+    .panels {
+        grid-template-columns: 1fr;
+    }
+
+    .results-summary {
+        grid-template-columns: 1fr;
+    }
+
+    header h1 {
+        font-size: 1.8em;
+    }
+}

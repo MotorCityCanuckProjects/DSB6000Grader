@@ -1,0 +1,37 @@
+total_points: 100
+criteria:
+  - name: Understanding of Ethical Concepts - Clarity & Accuracy
+    points: 15
+    description: Demonstrates a clear and accurate understanding of core ethical concepts relevant to data science (e.g., privacy, fairness, bias, transparency, accountability). Effectively defines and explains key terms. Avoids misinterpretations or oversimplifications.
+
+  - name: Understanding Ethical Concepts - Application to Data Science
+    points: 15
+    description: Successfully connects ethical concepts to specific scenarios or practices within data science. Provides relevant examples to illustrate the ethical implications of data science work. Shows an understanding of how ethical issues manifest in real-world data science applications.
+
+  - name: Critical Analysis and Reasoning - Identification of Ethical Dilemmas
+    points: 15
+    description: Identifies and articulates complex ethical dilemmas within data science. Recognizes the nuances and trade-offs involved in ethical decision-making. Goes beyond surface-level observations to explore deeper ethical questions.
+
+  - name: Critical Analysis & Reasoning - Logical Argumentation
+    points: 15
+    description: Constructs well-reasoned arguments to support their ethical positions. Provides evidence and justifications for their claims. Addresses potential counterarguments or alternative perspectives.
+
+  - name: Critical Analysis & Reasoning - Consideration of Diverse Perspectives
+    points: 10
+    description: Acknowledges that different stakeholders may have varying ethical viewpoints. Demonstrates an awareness of the social and cultural context of data science ethics.
+
+  - name: Practical Implications & Solutions - Proposed Solutions or Recommendations
+    points: 10
+    description: Offers thoughtful and practical solutions or recommendations for addressing ethical challenges in data science. Demonstrates an understanding of the feasibility and impact of their proposed solutions. Goes beyond simply stating problems to suggest actionable steps.
+
+  - name: Practical Implications & Solutions - Awareness of Responsibility
+    points: 5
+    description: Conveys a sense of personal and professional responsibility for ethical conduct in data science. Reflects on the role of data scientists in promoting ethical practices.
+
+  - name: Written Communications
+    points: 8
+    description: Presents ideas in a clear, concise, and organized manner. Uses appropriate language and terminology. Follows a logical structure and flow.
+
+  - name: Written Communication - Grammar & Mechanics
+    points: 7
+    description: Demonstrates strong writing skills, including correct grammar, punctuation, and spelling. Adheres to formatting guidelines (if applicable).
