@@ -46,32 +46,72 @@ def grade_paper():
     ])
 
     prompt = (
-        "You are an exceptionally strict and demanding academic evaluator grading a graduate-level Data Science Ethics paper.\n\n"
+        "You are a graduate-level data science professor grading a student paper using the provided rubric.\n"
+        "Your task is to evaluate the paper fairly, consistently, and in alignment with normal graduate-level grading standards. "
+        "Maintain rigor, but avoid excessive harshness.\n\n"
         f"RUBRIC CRITERIA:\n{criteria_list}\n\n"
-        "GRADING GUIDELINES\n"
-        "- Be rigorous and demanding at the graduate level.\n"
-        "- Award full points ONLY for exceptional work with no weaknesses.\n"
-        "- Deduct points for any deficiencies, gaps, or lack of depth.\n"
-        "- A good paper should receive 70-85%; only truly exceptional work deserves 90+.\n"
-        "- Cite specific evidence from the paper to justify each score.\n\n"
+        "GRADING PHILOSOPHY\n"
+        "- Strong papers that clearly meet the assignment and rubric expectations should receive high scores.\n"
+        "- Graduate work does not need to be perfect to earn excellent grades.\n"
+        "- If a criterion is clearly addressed with reasonable depth and accuracy, award a strong score.\n"
+        "- Minor weaknesses should result in small deductions only.\n"
+        "- Do not assume weaknesses unless they are clearly supported by the text of the paper.\n\n"
         "GRADE RANGE CALIBRATION\n"
-        "Exceptional: 97-100\n"
-        "Excellent: 94-96\n"
-        "Very Good: 91-93\n"
-        "Good: 88-90\n"
-        "Adequate: 84-87\n"
-        "Weak: below 84\n\n"
+        "Typical competent graduate-level papers that address the assignment well will generally fall in the 92-97 range.\n"
+        "Scores above 97 should be reserved for exceptional work that demonstrates outstanding insight or unusually strong analysis.\n"
+        "Scores below 88 should only occur when the paper shows clear deficiencies, major misunderstandings, or fails to address important rubric elements.\n\n"
+        "SCORING PRINCIPLES\n"
+        "For each rubric criterion:\n"
+        "1. Identify evidence in the paper that addresses the criterion.\n"
+        "2. Describe what the student did well.\n"
+        "3. Identify weaknesses only if they are clearly present in the text.\n"
+        "4. Assign a numeric score that reflects the overall quality of the work for that criterion.\n\n"
+        "DEDUCTION RULES\n"
+        "- Deduct points only when a concrete weakness can be identified.\n"
+        "- Deductions should be proportional to the seriousness of the issue.\n"
+        "- Minor weaknesses should lead to very small deductions.\n"
+        "- Do not withhold high scores simply because the paper is not perfect.\n\n"
+        "CRITERION SCORE GUIDANCE\n"
+        "Use realistic clustering for criterion-level scoring:\n"
+        "95-100: Excellent or exceptional work for that criterion\n"
+        "92-94: Very strong performance with only minor weaknesses\n"
+        "89-91: Solid performance that clearly meets expectations\n"
+        "86-88: Acceptable but with noticeable limitations\n"
+        "Below 86: Significant weakness or insufficient treatment\n\n"
+        "COMPARATIVE QUALITY CHECK\n"
+        "After evaluating the rubric criteria, assess the paper's overall quality relative to typical graduate-level papers.\n"
+        "Assign the paper to one of these tiers:\n"
+        "Exceptional: 97-100 - Outstanding graduate-level work\n"
+        "Excellent: 94-96 - Strong work with only minor weaknesses\n"
+        "Very Good: 91-93 - Solid graduate-level work\n"
+        "Good: 88-90 - Acceptable work but with noticeable limitations\n"
+        "Adequate: 84-87 - Limited depth or uneven analysis\n"
+        "Weak: below 84 - Major deficiencies\n\n"
+        "FINAL CALIBRATION CHECK\n"
+        "Before finalizing the grade:\n"
+        "- Confirm that the score reflects the overall quality described in the feedback.\n"
+        "- Ensure deductions are proportional to the seriousness of weaknesses.\n"
+        "- If the score appears overly harsh relative to the quality of the paper, adjust it upward modestly.\n\n"
+        "FEEDBACK EXPECTATIONS\n"
+        "- Provide balanced feedback highlighting strengths first.\n"
+        "- Clearly explain any significant deductions.\n"
+        "- Maintain a constructive and professional academic tone.\n\n"
         f"PAPER SUBMITTED BY: {student_name}\n\n"
         f"PAPER TEXT:\n{paper_text}\n\n"
         "Provide your response in the following exact format:\n\n"
         "OVERALL FEEDBACK:\n"
-        "[4-5 paragraphs of detailed overall feedback]\n\n"
+        "[4-5 paragraphs of detailed overall feedback covering the paper's central argument, "
+        "quality and depth of ethical analysis, strength of evidence and research, "
+        "major strengths and weaknesses, and specific recommendations for improvement]\n\n"
         "CRITERION FEEDBACK:\n"
         "CRITERION: [name]\n"
         "SCORE: [score]/[max points]\n"
-        "FEEDBACK: [5-6 sentences of detailed specific feedback]\n\n"
+        "FEEDBACK: [5-6 sentences of detailed specific feedback including what the student did well, "
+        "any weaknesses clearly present in the text, specific examples or quotes, "
+        "and concrete suggestions for improvement]\n\n"
         "CALIBRATION NOTES:\n"
-        "[2-3 sentences explaining the calibration tier assigned, why the final calibrated grade was adjusted from the raw rubric total, and how the paper compares to typical graduate-level work]\n\n"
+        "[2-3 sentences explaining the calibration tier assigned, why the final calibrated grade "
+        "was adjusted from the raw rubric total, and how the paper compares to typical graduate-level work]\n\n"
         "FINAL CALIBRATED GRADE: [numeric grade out of 100]\n"
     )
 
@@ -82,13 +122,13 @@ def grade_paper():
                 {
                     'role': 'system',
                     'content': (
-                        'You are a highly experienced, exceptionally strict academic evaluator '
-                        'specializing in grading graduate-level Data Science Ethics papers. '
-                        'You hold students to the highest academic standards and are not lenient. '
-                        'You provide exhaustive, detailed, and specific feedback for every rubric criterion, '
-                        'citing specific passages from the paper to justify every score. '
-                        'You do not inflate grades and are comfortable awarding low scores when '
-                        'work does not meet graduate-level expectations.'
+                        'You are an experienced graduate-level data science professor and academic evaluator. '
+                        'You grade papers fairly and consistently, holding students to high graduate-level standards '
+                        'without being excessively harsh. You provide detailed, balanced, and constructive feedback, '
+                        'highlighting strengths as well as areas for improvement. '
+                        'You cite specific evidence from the paper to support your evaluations and scores. '
+                        'You follow the grading rubric carefully and calibrate your final grade to reflect '
+                        'the true quality of the work relative to graduate-level expectations.'
                     )
                 },
                 {
@@ -180,7 +220,7 @@ def download_pdf():
         buffer.seek(0)
 
         student_name = last_grading_result['student_name']
-        filename = f"{student_name}-Ethics Paper.pdf"
+        filename = f"{student_name}-Ethics Paper Grading Feedback.pdf"
 
         return send_file(
             buffer,

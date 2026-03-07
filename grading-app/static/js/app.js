@@ -50,9 +50,12 @@ async function gradePaper() {
 }
 
 function displayResults(data) {
-    // Populate summary cards
+        // Populate summary cards
     document.getElementById('result-student-name').textContent = data.student_name || '--';
     document.getElementById('grade-value').textContent = data.grade || '--';
+    document.getElementById('calibrated-grade-value').textContent = data.calibrated_grade
+        ? data.calibrated_grade + ' / 100'
+        : '--';
     document.getElementById('word-count').textContent = data.word_count
         ? data.word_count.toLocaleString() + ' words'
         : '--';
