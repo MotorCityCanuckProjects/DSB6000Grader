@@ -45,111 +45,35 @@ def grade_paper():
         for c in rubric['criteria']
     ])
 
-    prompt = f"""You are an exceptionally strict and demanding academic evaluator grading a graduate-level Data Science Ethics paper.
-
-RUBRIC CRITERIA:
-{criteria_list}
-
-GRADING GUIDELINES – FOLLOW THESE CAREFULLY
-
-You are a graduate-level data science professor grading a student paper using the provided rubric.
-
-Your task is to evaluate the paper fairly, consistently, and in alignment with normal graduate-level grading standards. Maintain rigor, but avoid excessive harshness.
-
-GRADING PHILOSOPHY
-- Strong papers that clearly meet the assignment and rubric expectations should receive high scores.
-- Graduate work does not need to be perfect to earn excellent grades.
-- If a criterion is clearly addressed with reasonable depth and accuracy, award a strong score.
-- Minor weaknesses should result in small deductions only.
-- Do not assume weaknesses unless they are clearly supported by the text of the paper.
-
-GRADE RANGE CALIBRATION
-Typical competent graduate-level papers that address the assignment well will generally fall in the 92–97 range.
-
-Scores above 97 should be reserved for exceptional work that demonstrates outstanding insight or unusually strong analysis.
-
-Scores below 88 should only occur when the paper shows clear deficiencies, major misunderstandings, or fails to address important rubric elements.
-
-SCORING PRINCIPLES
-For each rubric criterion:
-
-1. Identify evidence in the paper that addresses the criterion.
-2. Describe what the student did well.
-3. Identify weaknesses only if they are clearly present in the text.
-4. Assign a numeric score that reflects the overall quality of the work for that criterion.
-
-DEDUCTION RULES
-- Deduct points only when a concrete weakness can be identified.
-- Deductions should be proportional to the seriousness of the issue.
-- Minor weaknesses should lead to very small deductions.
-- Do not withhold high scores simply because the paper is not perfect.
-
-CRITERION SCORE GUIDANCE
-Use realistic clustering for criterion-level scoring:
-
-95–100: Excellent or exceptional work for that criterion  
-92–94: Very strong performance with only minor weaknesses  
-89–91: Solid performance that clearly meets expectations  
-86–88: Acceptable but with noticeable limitations  
-Below 86: Significant weakness or insufficient treatment
-
-COMPARATIVE QUALITY CHECK
-After evaluating the rubric criteria, assess the paper’s overall quality relative to typical graduate-level papers.
-
-Assign the paper to one of these tiers:
-
-Exceptional – Outstanding graduate-level work  
-Excellent – Strong work with only minor weaknesses  
-Very Good – Solid graduate-level work  
-Good – Acceptable work but with noticeable limitations  
-Adequate – Limited depth or uneven analysis  
-Weak – Major deficiencies
-
-Use these tiers for calibration:
-
-Exceptional: 97–100  
-Excellent: 94–96  
-Very Good: 91–93  
-Good: 88–90  
-Adequate: 84–87  
-Weak: below 84
-
-FINAL CALIBRATION CHECK
-Before finalizing the grade:
-
-- Confirm that the score reflects the overall quality described in the feedback.
-- Ensure deductions are proportional to the seriousness of weaknesses.
-- If the score appears overly harsh relative to the quality of the paper, adjust it upward modestly.
-
-FEEDBACK EXPECTATIONS
-- Provide balanced feedback highlighting strengths first.
-- Clearly explain any significant deductions.
-- Maintain a constructive and professional academic tone.
-
-OUTPUT FORMAT
-Return:
-
-1. Criterion-by-criterion evaluation including evidence, strengths, weaknesses, and score
-2. The rubric-based total score
-3. The comparative quality tier
-4. The final calibrated grade
-5. A concise overall feedback summary
-
-PAPER SUBMITTED BY: {student_name}
-
-PAPER TEXT:
-{paper_text}
-
-Provide your response in the following exact format:
-
-OVERALL FEEDBACK:
-[4-5 paragraphs of detailed overall feedback covering: the paper's central argument and how well it is developed, the quality and depth of ethical analysis, the strength of evidence and research, major weaknesses and how they impact the grade, and specific recommendations for improvement]
-
-CRITERION FEEDBACK:
-CRITERION: [name]
-SCORE: [score]/[max points]
-FEEDBACK: [5-6 sentences of detailed, specific feedback. Include: what the student did well, what was missing or underdeveloped, specific examples or quotes from the paper to support your assessment, and concrete suggestions for how the student could improve this section]
-"""
+    prompt = (
+        "You are an exceptionally strict and demanding academic evaluator grading a graduate-level Data Science Ethics paper.\n\n"
+        f"RUBRIC CRITERIA:\n{criteria_list}\n\n"
+        "GRADING GUIDELINES\n"
+        "- Be rigorous and demanding at the graduate level.\n"
+        "- Award full points ONLY for exceptional work with no weaknesses.\n"
+        "- Deduct points for any deficiencies, gaps, or lack of depth.\n"
+        "- A good paper should receive 70-85%; only truly exceptional work deserves 90+.\n"
+        "- Cite specific evidence from the paper to justify each score.\n\n"
+        "GRADE RANGE CALIBRATION\n"
+        "Exceptional: 97-100\n"
+        "Excellent: 94-96\n"
+        "Very Good: 91-93\n"
+        "Good: 88-90\n"
+        "Adequate: 84-87\n"
+        "Weak: below 84\n\n"
+        f"PAPER SUBMITTED BY: {student_name}\n\n"
+        f"PAPER TEXT:\n{paper_text}\n\n"
+        "Provide your response in the following exact format:\n\n"
+        "OVERALL FEEDBACK:\n"
+        "[4-5 paragraphs of detailed overall feedback]\n\n"
+        "CRITERION FEEDBACK:\n"
+        "CRITERION: [name]\n"
+        "SCORE: [score]/[max points]\n"
+        "FEEDBACK: [5-6 sentences of detailed specific feedback]\n\n"
+        "CALIBRATION NOTES:\n"
+        "[2-3 sentences explaining the calibration tier assigned, why the final calibrated grade was adjusted from the raw rubric total, and how the paper compares to typical graduate-level work]\n\n"
+        "FINAL CALIBRATED GRADE: [numeric grade out of 100]\n"
+    )
 
     try:
         response = client.chat.completions.create(
@@ -157,7 +81,15 @@ FEEDBACK: [5-6 sentences of detailed, specific feedback. Include: what the stude
             messages=[
                 {
                     'role': 'system',
-                    'content': 'You are a highly experienced, exceptionally strict academic evaluator specializing in grading graduate-level Data Science Ethics papers. You hold students to the highest academic standards and are not lenient. You provide exhaustive, detailed, and specific feedback for every rubric criterion, citing specific passages from the paper to justify every score. You do not inflate grades and are comfortable awarding low scores when work does not meet graduate-level expectations.'
+                    'content': (
+                        'You are a highly experienced, exceptionally strict academic evaluator '
+                        'specializing in grading graduate-level Data Science Ethics papers. '
+                        'You hold students to the highest academic standards and are not lenient. '
+                        'You provide exhaustive, detailed, and specific feedback for every rubric criterion, '
+                        'citing specific passages from the paper to justify every score. '
+                        'You do not inflate grades and are comfortable awarding low scores when '
+                        'work does not meet graduate-level expectations.'
+                    )
                 },
                 {
                     'role': 'user',
@@ -169,15 +101,17 @@ FEEDBACK: [5-6 sentences of detailed, specific feedback. Include: what the stude
 
         evaluation = response.choices[0].message.content
 
+        # Parse overall feedback
         feedback = ''
         feedback_match = re.search(r'OVERALL FEEDBACK:\s*(.+?)(?=CRITERION FEEDBACK:|$)', evaluation, re.DOTALL)
         if feedback_match:
             feedback = feedback_match.group(1).strip()
 
+        # Parse criterion feedback and calculate rubric total
         criterion_feedback = []
         total_score = 0
         for criterion in rubric['criteria']:
-            pattern = rf"CRITERION:\s*{re.escape(criterion['name'])}\s*SCORE:\s*(\d+)/{criterion['points']}\s*FEEDBACK:\s*(.+?)(?=CRITERION:|$)"
+            pattern = rf"CRITERION:\s*{re.escape(criterion['name'])}\s*SCORE:\s*(\d+)/{criterion['points']}\s*FEEDBACK:\s*(.+?)(?=CRITERION:|FINAL CALIBRATED GRADE:|$)"
             match = re.search(pattern, evaluation, re.DOTALL | re.IGNORECASE)
             if match:
                 score = int(match.group(1))
@@ -195,12 +129,27 @@ FEEDBACK: [5-6 sentences of detailed, specific feedback. Include: what the stude
             })
 
         total_possible = rubric['total_points']
+        rubric_total = f'{total_score}/{total_possible}'
 
-                # Store result for PDF generation
+        # Parse calibration notes
+        calibration_notes = ''
+        calibration_match = re.search(r'CALIBRATION NOTES:\s*(.+?)(?=FINAL CALIBRATED GRADE:|$)', evaluation, re.DOTALL | re.IGNORECASE)
+        if calibration_match:
+            calibration_notes = calibration_match.group(1).strip()
+
+        # Parse the final calibrated grade
+        calibrated_grade = None
+        calibrated_match = re.search(r'FINAL CALIBRATED GRADE:\s*([\d.]+)', evaluation, re.IGNORECASE)
+        if calibrated_match:
+            calibrated_grade = calibrated_match.group(1).strip()
+
+        # Store result for PDF generation
         last_grading_result.update({
             'student_name': student_name,
             'word_count': word_count,
-            'grade': f'{total_score}/{total_possible}',
+            'rubric_total': rubric_total,
+            'calibrated_grade': calibrated_grade,
+            'calibration_notes': calibration_notes,
             'feedback': feedback,
             'criterion_feedback': criterion_feedback,
             'timestamp': datetime.now().strftime('%B %d, %Y')
@@ -209,7 +158,9 @@ FEEDBACK: [5-6 sentences of detailed, specific feedback. Include: what the stude
         return jsonify({
             'student_name': student_name,
             'word_count': word_count,
-            'grade': f'{total_score}/{total_possible}',
+            'grade': rubric_total,
+            'calibrated_grade': calibrated_grade,
+            'calibration_notes': calibration_notes,
             'feedback': feedback,
             'criterion_feedback': criterion_feedback
         })
@@ -229,7 +180,7 @@ def download_pdf():
         buffer.seek(0)
 
         student_name = last_grading_result['student_name']
-        filename = f"{student_name}-Ethics Paper Feedback.pdf"
+        filename = f"{student_name}-Ethics Paper.pdf"
 
         return send_file(
             buffer,
@@ -309,8 +260,10 @@ def generate_pdf(buffer, data):
         ['Student Name:', data['student_name']],
         ['Grading Date:', data['timestamp']],
         ['Word Count:', f"{data['word_count']:,} words"],
-        ['Overall Score:', data['grade']],
+        ['Rubric Total:', data['rubric_total']],
     ]
+    if data.get('calibrated_grade'):
+        info_data.append(['Calibrated Grade:', f"{data['calibrated_grade']} / 100"])
     info_table = Table(info_data, colWidths=[2 * inch, 4 * inch])
     info_table.setStyle(TableStyle([
         ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
@@ -323,8 +276,10 @@ def generate_pdf(buffer, data):
     elements.append(info_table)
     elements.append(Spacer(1, 0.2 * inch))
 
-    # Grade highlight box
-    grade_data = [['Overall Score', data['grade']]]
+    # Grade highlight box - use calibrated grade if available, else rubric total
+    display_grade = f"{data['calibrated_grade']} / 100" if data.get('calibrated_grade') else data['rubric_total']
+    grade_label = 'Final Calibrated Grade' if data.get('calibrated_grade') else 'Rubric Total Score'
+    grade_data = [[grade_label, display_grade]]
     grade_table = Table(grade_data, colWidths=[3 * inch, 3 * inch])
     grade_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#1a1a2e')),
@@ -334,7 +289,6 @@ def generate_pdf(buffer, data):
         ('FONTSIZE', (0, 0), (-1, -1), 14),
         ('TOPPADDING', (0, 0), (-1, -1), 12),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
-        ('ROUNDEDCORNERS', [5, 5, 5, 5]),
     ]))
     elements.append(grade_table)
     elements.append(Spacer(1, 0.2 * inch))
@@ -352,7 +306,7 @@ def generate_pdf(buffer, data):
     elements.append(Paragraph('Criterion Breakdown', heading_style))
     for criterion in data['criterion_feedback']:
         elements.append(Paragraph(
-            f"{criterion['name']}  —  {criterion['score']} / {criterion['points']} pts",
+            f"{criterion['name']}  -  {criterion['score']} / {criterion['points']} pts",
             subheading_style
         ))
         for para in criterion['feedback'].split('\n'):
@@ -360,7 +314,32 @@ def generate_pdf(buffer, data):
                 elements.append(Paragraph(para.strip(), body_style))
         elements.append(Spacer(1, 0.05 * inch))
 
+    # Calibration notes and final grade at the bottom
+    elements.append(HRFlowable(width='100%', thickness=1, color=colors.HexColor('#cccccc')))
+    elements.append(Paragraph('Grade Calibration', heading_style))
+    if data.get('calibration_notes'):
+        for para in data['calibration_notes'].split('\n'):
+            if para.strip():
+                elements.append(Paragraph(para.strip(), body_style))
+    elements.append(Spacer(1, 0.15 * inch))
+
+    # Final calibrated grade box
+    if data.get('calibrated_grade'):
+        final_data = [['Final Calibrated Grade', f"{data['calibrated_grade']} / 100"]]
+        final_table = Table(final_data, colWidths=[3 * inch, 3 * inch])
+        final_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#0f3460')),
+            ('TEXTCOLOR', (0, 0), (-1, -1), colors.white),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 16),
+            ('TOPPADDING', (0, 0), (-1, -1), 14),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 14),
+        ]))
+        elements.append(final_table)
+
     doc.build(elements)
+
 
 if __name__ == '__main__':
     print('\n' + '='*60)
