@@ -57,9 +57,9 @@ def grade_paper():
         "- Minor weaknesses should result in small deductions only.\n"
         "- Do not assume weaknesses unless they are clearly supported by the text of the paper.\n\n"
         "GRADE RANGE CALIBRATION\n"
-        "Typical competent graduate-level papers that address the assignment well will generally fall in the 88-92 range.\n"
-        "Scores above 97 should be reserved for exceptional work that demonstrates outstanding insight or unusually strong analysis.\n"
-        "Scores below 85 should only occur when the paper shows clear deficiencies, major misunderstandings, or fails to address important rubric elements.\n\n"
+        "Typical competent graduate-level papers that address the assignment well will generally fall in the 84-88 range.\n"
+        "Scores above 95 should be reserved for exceptional work that demonstrates outstanding insight or unusually strong analysis.\n"
+        "Scores below 82 should occur when the paper shows clear deficiencies, notable misunderstandings, or fails to address important rubric elements.\n\n"
         "SCORING PRINCIPLES\n"
         "For each rubric criterion:\n"
         "1. Identify evidence in the paper that addresses the criterion.\n"
@@ -69,29 +69,32 @@ def grade_paper():
         "DEDUCTION RULES\n"
         "- Deduct points only when a concrete weakness can be identified.\n"
         "- Deductions should be proportional to the seriousness of the issue.\n"
-        "- Minor weaknesses should lead to very small deductions.\n"
+        "- Minor weaknesses should lead to small but meaningful deductions.\n"
         "- Do not withhold high scores simply because the paper is not perfect.\n\n"
         "CRITERION SCORE GUIDANCE\n"
         "Use realistic clustering for criterion-level scoring:\n"
-        "95-100: Excellent or exceptional work for that criterion\n"
-        "88-94: Very strong performance with only minor weaknesses\n"
-        "80-87: Solid performance that clearly meets expectations\n"
-        "75-80: Acceptable but with noticeable limitations\n"
-        "Below 75: Significant weakness or insufficient treatment\n\n"
+        "92-100: Excellent or exceptional work for that criterion\n"
+        "85-91: Very strong performance with only minor weaknesses\n"
+        "78-84: Solid performance that clearly meets expectations\n"
+        "72-77: Acceptable but with noticeable limitations\n"
+        "Below 72: Significant weakness or insufficient treatment\n\n"
         "COMPARATIVE QUALITY CHECK\n"
+        "First determine whether this paper is ABOVE AVERAGE, TYPICAL, or BELOW AVERAGE compared with graduate-level papers for this assignment.\n"
+        "Most papers should fall into the TYPICAL category and receive grades in the mid-to-high 80s rather than the 90s.\n"
         "After evaluating the rubric criteria, assess the paper's overall quality relative to typical graduate-level papers.\n"
         "Assign the paper to one of these tiers:\n"
-        "Exceptional: 95-100 - Outstanding graduate-level work\n"
-        "Excellent: 91-94 - Strong work with only minor weaknesses\n"
-        "Very Good: 87-90 - Solid graduate-level work\n"
-        "Good: 83-86 - Acceptable work but with noticeable limitations\n"
-        "Adequate: 79-82 - Limited depth or uneven analysis\n"
-        "Weak: below 79 - Major deficiencies\n\n"
+        "Exceptional: 93-100 - Outstanding graduate-level work\n"
+        "Excellent: 89-92 - Strong work with only minor weaknesses\n"
+        "Very Good: 84-88 - Solid graduate-level work\n"
+        "Good: 80-83 - Acceptable work but with noticeable limitations\n"
+        "Adequate: 76-79 - Limited depth or uneven analysis\n"
+        "Weak: below 76 - Major deficiencies\n\n"
         "FINAL CALIBRATION CHECK\n"
         "Before finalizing the grade:\n"
         "- Confirm that the score reflects the overall quality described in the feedback.\n"
         "- Ensure deductions are proportional to the seriousness of weaknesses.\n"
-        "- If the score appears overly harsh relative to the quality of the paper, adjust it upward modestly.\n\n"
+        "- Avoid grade inflation: competent but typical graduate work should generally fall in the mid-to-high 80s.\n"
+        "- If the score appears overly generous relative to the quality of the paper, adjust it downward modestly.\n\n"
         "FEEDBACK EXPECTATIONS\n"
         "- Provide balanced feedback highlighting strengths first.\n"
         "- Clearly explain any significant deductions.\n"
@@ -151,7 +154,7 @@ def grade_paper():
         criterion_feedback = []
         total_score = 0
         for criterion in rubric['criteria']:
-            pattern = rf"CRITERION:\s*{re.escape(criterion['name'])}\s*SCORE:\s*(\d+)/{criterion['points']}\s*FEEDBACK:\s*(.+?)(?=CRITERION:|FINAL CALIBRATED GRADE:|$)"
+            pattern = rf"CRITERION:\s*{re.escape(criterion['name'])}\s*SCORE:\s*(\d+)/{criterion['points']}\s*FEEDBACK:\s*(.+?)(?=CRITERION:|CALIBRATION NOTES:|FINAL CALIBRATED GRADE:|$)"
             match = re.search(pattern, evaluation, re.DOTALL | re.IGNORECASE)
             if match:
                 score = int(match.group(1))
@@ -291,7 +294,7 @@ def generate_pdf(buffer, data):
 
     # Title
     elements.append(Paragraph('Data Science Ethics', title_style))
-    elements.append(Paragraph('Graduate Paper Grading Report', subtitle_style))
+    elements.append(Paragraph('DSB6000 Paper Grading Feedback', subtitle_style))
     elements.append(HRFlowable(width='100%', thickness=2, color=colors.HexColor('#0f3460')))
     elements.append(Spacer(1, 0.2 * inch))
 
