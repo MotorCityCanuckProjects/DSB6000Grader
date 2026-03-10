@@ -26,7 +26,7 @@ A locally-hosted web application that uses the OpenAI GPT-4o API to automaticall
 
 This application is designed to assist instructors in grading graduate-level papers on Data Science Ethics. The instructor pastes the student's paper into a text window, and the application sends the paper to the OpenAI GPT-4o API along with the grading rubric. The API returns a detailed grade and feedback for each rubric category, which is displayed on the page.
 
-The grading system is intentionally strict, holding students to high graduate-level academic standards. Scores above 90 are rare and reserved for truly exceptional work.
+The grading system evaluates papers fairly and consistently, holding students to high graduate-level academic standards while avoiding excessive harshness. Feedback highlights strengths first and deductions are made only when concrete weaknesses are clearly present in the text. A final calibrated grade is returned alongside the raw rubric total, reflecting the paper's overall quality relative to typical graduate-level work.
 
 ---
 
@@ -35,10 +35,13 @@ The grading system is intentionally strict, holding students to high graduate-le
 - **Rubric display** - The left panel displays the full grading rubric loaded from `rubric.yaml`, including each criterion name, point value, and description.
 - **Paper submission** - The right panel accepts a student name and the full text of the paper to be graded.
 - **Word count** - The application automatically counts and displays the number of words in the submitted paper.
-- **AI-powered grading** - Uses OpenAI GPT-4o to evaluate the paper against the rubric with strict graduate-level standards.
-- **Detailed feedback** - Provides 4-5 paragraphs of overall feedback and 5-6 sentences of specific feedback for each rubric criterion.
-- **Score breakdown** - Displays the score earned for each rubric criterion alongside the feedback.
-- **Total score** - Displays the total points earned out of the total possible points (e.g., 82/100).
+- **AI-powered grading** - Uses OpenAI GPT-4o to evaluate the paper against the rubric using balanced, fair, graduate-level grading standards.
+- **Detailed feedback** - Provides 4-5 paragraphs of overall feedback and 5-6 sentences of specific feedback per rubric criterion, referencing specific passages from the paper.
+- **Score breakdown** - Displays the score earned for each rubric criterion alongside detailed feedback.
+- **Rubric total** - Displays the sum of all criterion scores out of the total possible points (e.g., 82/100).
+- **Calibrated grade** - Displays a final calibrated grade adjusted to reflect the paper's overall quality tier relative to typical graduate-level work.
+- **Calibration notes** - Explains the quality tier assigned and how the calibrated grade relates to the rubric total.
+- **PDF download** - Generates and downloads a formatted PDF report of the full grading results including calibration notes.
 - **Loading indicator** - Displays a spinner while the paper is being graded.
 - **Error handling** - Displays user-friendly error messages if something goes wrong.
 - **Configurable rubric** - The rubric is stored in a simple YAML file and can be easily updated without changing any code.
@@ -67,7 +70,7 @@ grading-app/
 ## Requirements
 
 - Python 3.8 or higher
-- An OpenAI API key with access to GPT-4o
+- An OpenAI API key with access to GPT-4o set up as a local environment variable called 'OPENAI_API_KEY'
 - An internet connection (for the OpenAI API call)
 - A modern web browser (Chrome, Firefox, Edge, Safari)
 
@@ -141,7 +144,7 @@ You can obtain an API key from the [OpenAI Platform](https://platform.openai.com
 
 ## Running the Application
 
-Once the environment variable is set and the dependencies are installed, start the application by running:
+Once the environment variable is set and the dependencies are installed, ensure that you're in the grading-app directory, start the application by running:
 
 ```
 python app.py
@@ -312,10 +315,11 @@ This is expected. GPT-4o processes the full paper text along with the rubric and
 
 ## Future Improvements
 
-- **PDF export** - Allow the instructor to download the grading results as a formatted PDF report.
 - **Database storage** - Save grading results to a database for record-keeping and review.
 - **Rubric editor** - Add a UI to edit the rubric directly from the web interface.
-- **Batch grading** - Support uploading and grading multiple papers at once.
+- **Batch grading** - Support uploading and grading multiple papers at once.  Use caution as this will modify the LLM results.
 - **Authentication** - Add a login system to restrict access to authorized instructors.
 - **Grade history** - View a history of all previously graded papers.
 - **Customizable prompts** - Allow the instructor to adjust the grading strictness and feedback length from the UI.
+- **Auto Download** - Allow the application to automatically download the generated PDF
+- **Prompt Edit** - Provide a screen that allows the instructor to edit and store the prompts for the OpenAI API
