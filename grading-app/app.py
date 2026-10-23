@@ -2,6 +2,7 @@ from flask import Flask, render_template, request, jsonify, send_file
 import yaml
 import os
 import re
+from pathlib import Path
 from io import BytesIO
 from datetime import datetime
 from openai import OpenAI
@@ -17,9 +18,70 @@ app = Flask(__name__)
 # Store last grading result for PDF generation
 last_grading_result = {}
 
+APP_DIR = Path(__file__).resolve().parent
+PROMPT_CONFIG_PATH = APP_DIR / 'config' / 'grading_prompt.yaml'
+
 def load_rubric():
-    with open('rubric.yaml', 'r') as f:
+    with (APP_DIR / 'rubric.yaml').open('r', encoding='utf-8') as f:
         return yaml.safe_load(f)
+
+
+def load_grading_prompts():
+    """Load and validate the active grading prompt configuration."""
+    try:
+        with PROMPT_CONFIG_PATH.open('r', encoding='utf-8') as f:
+            config = yaml.safe_load(f)
+    except FileNotFoundError as exc:
+        raise ValueError(
+            f'Grading prompt configuration file is missing: {PROMPT_CONFIG_PATH}'
+        ) from exc
+    except yaml.YAMLError as exc:
+        raise ValueError(
+            f'Grading prompt configuration is malformed: {exc}'
+        ) from exc
+    except OSError as exc:
+        raise ValueError(
+            f'Grading prompt configuration could not be read: {exc}'
+        ) from exc
+
+    if not isinstance(config, dict):
+        raise ValueError('Grading prompt configuration must contain a YAML mapping.')
+
+    required_fields = ('system_prompt', 'user_prompt')
+    missing_fields = [
+        field for field in required_fields
+        if not isinstance(config.get(field), str) or not config[field].strip()
+    ]
+    if missing_fields:
+        raise ValueError(
+            'Grading prompt configuration is missing required text field(s): '
+            + ', '.join(missing_fields)
+        )
+
+    required_placeholders = ('{criteria_list}', '{student_name}', '{paper_text}')
+    missing_placeholders = [
+        placeholder for placeholder in required_placeholders
+        if placeholder not in config['user_prompt']
+    ]
+    if missing_placeholders:
+        raise ValueError(
+            'Grading user prompt is missing required placeholder(s): '
+            + ', '.join(missing_placeholders)
+        )
+
+    return config['system_prompt'], config['user_prompt']
+
+
+def populate_grading_prompt(template, criteria_list, student_name, paper_text):
+    """Replace only known placeholders so literal braces in paper text remain unchanged."""
+    replacements = {
+        '{criteria_list}': criteria_list,
+        '{student_name}': student_name,
+        '{paper_text}': paper_text,
+    }
+    for placeholder, value in replacements.items():
+        template = template.replace(placeholder, value)
+    return template
 
 client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
@@ -37,132 +99,22 @@ def grade_paper():
     if not paper_text:
         return jsonify({'error': 'No paper text provided'}), 400
 
-    word_count = len(paper_text.strip().split())
-    rubric = load_rubric()
-
-    criteria_list = '\n'.join([
-        f"- {c['name']} ({c['points']} points): {c['description']}"
-        for c in rubric['criteria']
-    ])
-
-    prompt = (
-        "You are a graduate-level data science professor grading a student paper using the provided rubric.\n"
-        "Your task is to evaluate the paper fairly, consistently, and in alignment with normal graduate-level grading standards. "
-        "Maintain rigor, but avoid excessive harshness.\n\n"
-
-        f"RUBRIC CRITERIA:\n{criteria_list}\n\n"
-
-        "GRADING PHILOSOPHY\n"
-        "- Strong papers that clearly meet the assignment and rubric expectations should receive high scores.\n"
-        "- Graduate work does not need to be perfect to earn excellent grades.\n"
-        "- If a criterion is clearly addressed with reasonable depth and accuracy, award a strong score.\n"
-        "- Minor weaknesses should result in small deductions only.\n"
-        "- Do not assume weaknesses unless they are clearly supported by the text of the paper.\n\n"
-
-        "GRADE RANGE CALIBRATION\n"
-        "Typical competent graduate-level papers that address the assignment well will generally fall in the 84-88 range.\n"
-        "Scores above 95 should be reserved for exceptional work that demonstrates outstanding insight or unusually strong analysis.\n"
-        "Scores below 82 should occur when the paper shows clear deficiencies, notable misunderstandings, or fails to address important rubric elements.\n\n"
-
-        "SCORING PRINCIPLES\n"
-        "For each rubric criterion:\n"
-        "1. Identify evidence in the paper that addresses the criterion.\n"
-        "2. Describe what the student did well.\n"
-        "3. Identify weaknesses only if they are clearly present in the text.\n"
-        "4. Assign a numeric score that reflects the overall quality of the work for that criterion.\n\n"
-
-        "NORMATIVE REFERENCE ANCHOR\n"
-        "Mentally compare this paper to the typical range of graduate-level data science papers submitted for similar assignments.\n"
-        "Use that comparison to judge whether the work is stronger than typical, typical, or weaker than typical before assigning scores.\n"
-        "This comparison should guide scoring so that papers of similar quality receive similar grades.\n\n"
-
-        "DEDUCTION RULES\n"
-        "- Deduct points only when a concrete weakness can be identified.\n"
-        "- Deductions should be proportional to the seriousness of the issue.\n"
-        "- Minor weaknesses should lead to small but meaningful deductions.\n"
-        "- Do not withhold high scores simply because the paper is not perfect.\n\n"
-
-        "CRITERION SCORE GUIDANCE\n"
-        "Use realistic clustering for criterion-level scoring:\n"
-        "92-100: Excellent or exceptional work for that criterion\n"
-        "85-91: Very strong performance with only minor weaknesses\n"
-        "78-84: Solid performance that clearly meets expectations\n"
-        "72-77: Acceptable but with noticeable limitations\n"
-        "Below 72: Significant weakness or insufficient treatment\n\n"
-
-        "COMPARATIVE QUALITY CHECK\n"
-        "First determine whether this paper is ABOVE AVERAGE, TYPICAL, or BELOW AVERAGE compared with graduate-level papers for this assignment.\n"
-        "Most papers will fall into the TYPICAL category, but stronger or weaker papers should be clearly distinguished.\n"
-        "Use the full grading range when warranted and do not cluster papers into the same score band unless their quality is genuinely similar.\n"
-        "Typical papers should often fall in the 84-88 range, but clearly stronger papers should receive higher grades and clearly weaker papers should receive lower grades.\n"
-        "After evaluating the rubric criteria, assess the paper's overall quality relative to typical graduate-level papers.\n"
-        "Assign the paper to one of these tiers:\n"
-        "Exceptional: 94-100 - Outstanding graduate-level work with unusual insight, depth, or sophistication\n"
-        "Excellent: 89-93 - Clearly stronger than typical graduate-level work\n"
-        "Very Good: 84-88 - Solid graduate-level work that meets expectations well\n"
-        "Good: 79-83 - Adequate work with noticeable limitations in depth, clarity, or analysis\n"
-        "Adequate: 74-78 - Meaningful weaknesses or uneven treatment of important rubric elements\n"
-        "Weak: below 74 - Major deficiencies, serious omissions, or substantial misunderstanding\n\n"
-
-        "FINAL CALIBRATION CHECK\n"
-        "Before finalizing the grade:\n"
-        "- Confirm that the score reflects the overall quality described in the feedback.\n"
-        "- Ensure deductions are proportional to the seriousness of weaknesses.\n"
-        "- Avoid grade inflation: typical competent graduate work should generally fall in the mid-to-high 80s.\n"
-        "- Also avoid score compression: papers that are meaningfully better or worse than typical should receive meaningfully different grades.\n"
-        "- If the score appears overly generous relative to the quality of the paper, adjust it downward modestly.\n"
-        "- If the score does not sufficiently distinguish this paper from clearly stronger or weaker work, adjust it accordingly.\n"
-        "- Do not default to the same score for many papers; ensure the score reflects the distinct quality of this paper.\n\n"
-
-        "ACADEMIC FEEDBACK STYLE\n"
-        "Write feedback as a professor who has carefully read the entire paper.\n"
-        "Where possible, quote or paraphrase specific arguments, passages, or examples from the student's paper when explaining strengths or weaknesses.\n"
-        "Avoid generic feedback phrases. Comments should clearly reference the student's actual reasoning, claims, evidence, or analysis.\n"
-        "Ensure that strengths and weaknesses are directly connected to the student's discussion and ethical analysis.\n\n"
-
-        "FEEDBACK EXPECTATIONS\n"
-        "- Provide balanced feedback highlighting strengths first.\n"
-        "- Clearly explain any significant deductions.\n"
-        "- Maintain a constructive and professional academic tone.\n\n"
-
-        f"PAPER SUBMITTED BY: {student_name}\n\n"
-        f"PAPER TEXT:\n{paper_text}\n\n"
-
-        "Provide your response in the following exact format:\n\n"
-
-        "OVERALL FEEDBACK:\n"
-        "[4-5 paragraphs of detailed overall feedback covering the paper's central argument, "
-        "quality and depth of ethical analysis, strength of evidence and research, "
-        "major strengths and weaknesses, and specific recommendations for improvement]\n\n"
-
-        "CRITERION FEEDBACK:\n"
-        "CRITERION: [name]\n"
-        "SCORE: [score]/[max points]\n"
-        "FEEDBACK: [5-6 sentences of detailed specific feedback including what the student did well, "
-        "any weaknesses clearly present in the text, specific examples or quotes, "
-        "and concrete suggestions for improvement]\n\n"
-
-        "CALIBRATION NOTES:\n"
-        "[2-3 sentences explaining the calibration tier assigned, why the final calibrated grade "
-        "was adjusted from the raw rubric total, and how the paper compares to typical graduate-level work]\n\n"
-
-        "FINAL CALIBRATED GRADE: [numeric grade out of 100]\n"
-
-    )
-
     try:
+        word_count = len(paper_text.strip().split())
+        rubric = load_rubric()
+        criteria_list = '\n'.join([
+            f"- {c['name']} ({c['points']} points): {c['description']}"
+            for c in rubric['criteria']
+        ])
+        system_prompt, user_prompt_template = load_grading_prompts()
+        prompt = populate_grading_prompt(
+            user_prompt_template, criteria_list, student_name, paper_text
+        )
+
         messages = [
                 {
                     'role': 'system',
-                    'content': (
-                        'You are an experienced graduate-level data science professor and academic evaluator. '
-                        'You grade papers fairly and consistently, holding students to high graduate-level standards '
-                        'without being excessively harsh. You provide detailed, balanced, and constructive feedback, '
-                        'highlighting strengths as well as areas for improvement. '
-                        'You cite specific evidence from the paper to support your evaluations and scores. '
-                        'You follow the grading rubric carefully and calibrate your final grade to reflect '
-                        'the true quality of the work relative to graduate-level expectations.'
-                    )
+                    'content': system_prompt
                 },
                 {
                     'role': 'user',
