@@ -151,9 +151,7 @@ def grade_paper():
     )
 
     try:
-        response = client.chat.completions.create(
-            model='gpt-4o',
-            messages=[
+        messages = [
                 {
                     'role': 'system',
                     'content': (
@@ -170,11 +168,15 @@ def grade_paper():
                     'role': 'user',
                     'content': prompt
                 }
-            ],
-            temperature=0.2
+            ]
+
+        response = client.responses.create(
+            model='gpt-6-astra',
+            reasoning={'effort': 'medium'},
+            input=messages
         )
 
-        evaluation = response.choices[0].message.content
+        evaluation = response.output_text
 
         # Parse overall feedback
         feedback = ''
