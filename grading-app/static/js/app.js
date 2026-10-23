@@ -2,6 +2,9 @@
 // Grading App - Main JavaScript
 // =============================================
 
+let elapsedTimerId = null;
+let gradingStartedAt = null;
+
 async function gradePaper() {
     const studentName = document.getElementById('student-name').value.trim();
     const paperText = document.getElementById('paper-text').value.trim();
@@ -16,7 +19,8 @@ async function gradePaper() {
         return;
     }
 
-    // Show loading, hide results
+    // Show loading, hide results, and prevent duplicate submissions.
+    clearGradingError();
     showLoading(true);
     hideResults();
     disableButtons(true);
@@ -42,7 +46,7 @@ async function gradePaper() {
         displayResults(data);
 
     } catch (error) {
-        alert('Error grading paper: ' + error.message);
+        showGradingError('Unable to grade this paper. Please try again. ' + error.message);
     } finally {
         showLoading(false);
         disableButtons(false);
@@ -91,6 +95,7 @@ function displayResults(data) {
 function clearForm() {
     document.getElementById('student-name').value = '';
     document.getElementById('paper-text').value = '';
+    clearGradingError();
     hideResults();
     window.scrollTo({ top: 0, behavior: 'smooth' });
     document.getElementById('student-name').focus();
@@ -103,10 +108,40 @@ function hideResults() {
 function showLoading(show) {
     const loader = document.getElementById('loading');
     if (show) {
+        stopElapsedTimer();
+        gradingStartedAt = Date.now();
+        updateElapsedTime();
+        elapsedTimerId = window.setInterval(updateElapsedTime, 1000);
         loader.classList.remove('hidden');
     } else {
+        stopElapsedTimer();
         loader.classList.add('hidden');
     }
+}
+
+function updateElapsedTime() {
+    const elapsedSeconds = Math.floor((Date.now() - gradingStartedAt) / 1000);
+    document.getElementById('elapsed-seconds').textContent = elapsedSeconds;
+}
+
+function stopElapsedTimer() {
+    if (elapsedTimerId !== null) {
+        window.clearInterval(elapsedTimerId);
+        elapsedTimerId = null;
+    }
+    gradingStartedAt = null;
+}
+
+function showGradingError(message) {
+    const errorEl = document.getElementById('grading-error');
+    errorEl.textContent = message;
+    errorEl.classList.remove('hidden');
+}
+
+function clearGradingError() {
+    const errorEl = document.getElementById('grading-error');
+    errorEl.textContent = '';
+    errorEl.classList.add('hidden');
 }
 
 function disableButtons(disabled) {

@@ -52,14 +52,18 @@
                 <button id="grade-btn" onclick="gradePaper()">Grade Paper</button>
                 <button id="clear-btn" class="btn-secondary" onclick="clearForm()">Clear</button>
             </div>
+
+            <!-- Grading status -->
+            <div id="loading" class="loading hidden" role="status" aria-live="polite">
+                <div class="spinner" aria-hidden="true"></div>
+                <div>
+                    <p>Evaluating paper against the grading rubric. Please wait...</p>
+                    <p class="elapsed-time">Elapsed time: <span id="elapsed-seconds">0</span> seconds</p>
+                </div>
+            </div>
+            <p id="grading-error" class="grading-error hidden" role="alert"></p>
         </div>
 
-    </div>
-
-    <!-- Loading Indicator -->
-    <div id="loading" class="loading hidden">
-        <div class="spinner"></div>
-        <p>Grading paper, please wait...</p>
     </div>
 
     <!-- Results Section -->
