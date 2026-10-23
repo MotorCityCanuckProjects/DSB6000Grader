@@ -1,12 +1,13 @@
 from flask import Flask, render_template, request, jsonify, send_file
 import yaml
 import os
-import re
+import math
 from pathlib import Path
 from io import BytesIO
 from datetime import datetime
-from decimal import Decimal, InvalidOperation
-from openai import OpenAI
+from decimal import Decimal
+from openai import APIError, APITimeoutError, OpenAI
+from pydantic import BaseModel, ConfigDict, ValidationError
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
@@ -21,6 +22,23 @@ last_grading_result = {}
 
 APP_DIR = Path(__file__).resolve().parent
 PROMPT_CONFIG_PATH = APP_DIR / 'config' / 'grading_prompt.yaml'
+
+
+class CriterionEvaluation(BaseModel):
+    """One rubric criterion returned by the model's structured response."""
+    model_config = ConfigDict(extra='forbid')
+
+    criterion_name: str
+    score: float
+    feedback: str
+
+
+class GradingEvaluation(BaseModel):
+    """Structured grading response requested from the OpenAI Responses API."""
+    model_config = ConfigDict(extra='forbid')
+
+    overall_feedback: str
+    criteria: list[CriterionEvaluation]
 
 def load_rubric():
     with (APP_DIR / 'rubric.yaml').open('r', encoding='utf-8') as f:
@@ -93,18 +111,14 @@ def format_score(score):
     return formatted.rstrip('0').rstrip('.') if '.' in formatted else formatted
 
 
-def parse_criterion_feedback(evaluation, rubric):
-    """Validate rubric scores and feedback from the model's plain-text response."""
-    pattern = re.compile(
-        r'CRITERION:\s*(?P<name>.+?)\s*\n'
-        r'SCORE:\s*(?P<score>[^\s/]+)\s*/\s*(?P<maximum>[^\s]+)\s*\n'
-        r'FEEDBACK:\s*(?P<feedback>.+?)(?=\n\s*CRITERION:|\Z)',
-        re.DOTALL | re.IGNORECASE,
-    )
-    matches = list(pattern.finditer(evaluation))
+def validate_grading_evaluation(evaluation, rubric):
+    """Validate the model response against the authoritative YAML rubric."""
     expected_criteria = {criterion['name']: criterion for criterion in rubric['criteria']}
     expected_names = [criterion['name'] for criterion in rubric['criteria']]
-    parsed_names = [match.group('name').strip() for match in matches]
+    parsed_names = [criterion.criterion_name for criterion in evaluation.criteria]
+
+    if not evaluation.overall_feedback.strip():
+        raise ValueError('Invalid grading response: overall feedback is missing.')
 
     duplicate_names = sorted({name for name in parsed_names if parsed_names.count(name) > 1})
     if duplicate_names:
@@ -127,30 +141,25 @@ def parse_criterion_feedback(evaluation, rubric):
             + ', '.join(missing_names)
         )
 
-    if len(matches) != len(rubric['criteria']):
+    if len(evaluation.criteria) != len(rubric['criteria']):
         raise ValueError('Invalid grading response: each rubric criterion must appear exactly once.')
-    if parsed_names != expected_names:
-        raise ValueError('Invalid grading response: rubric criteria must appear in rubric order.')
 
+    criteria_by_name = {criterion.criterion_name: criterion for criterion in evaluation.criteria}
     criterion_feedback = []
     total_score = Decimal('0')
-    for match in matches:
-        name = match.group('name').strip()
+    total_possible = Decimal('0')
+    for name in expected_names:
         criterion = expected_criteria[name]
-        try:
-            score = Decimal(match.group('score'))
-            response_maximum = Decimal(match.group('maximum'))
-        except InvalidOperation as exc:
-            raise ValueError(f'Invalid grading response: nonnumeric score for {name}.') from exc
-
-        criterion_maximum = Decimal(str(criterion['points']))
-        if not score.is_finite() or not response_maximum.is_finite():
+        response_criterion = criteria_by_name[name]
+        if not isinstance(response_criterion.score, (int, float)) or isinstance(response_criterion.score, bool):
             raise ValueError(f'Invalid grading response: nonnumeric score for {name}.')
-        if response_maximum != criterion_maximum:
-            raise ValueError(
-                f'Invalid grading response: maximum score for {name} must be '
-                f'{format_score(criterion_maximum)}.'
-            )
+        if not math.isfinite(response_criterion.score):
+            raise ValueError(f'Invalid grading response: nonfinite score for {name}.')
+        if not response_criterion.feedback.strip():
+            raise ValueError(f'Invalid grading response: feedback is missing for {name}.')
+
+        score = Decimal(str(response_criterion.score))
+        criterion_maximum = Decimal(str(criterion['points']))
         if score < 0 or score > criterion_maximum:
             raise ValueError(
                 f'Invalid grading response: score for {name} must be between 0 and '
@@ -158,14 +167,29 @@ def parse_criterion_feedback(evaluation, rubric):
             )
 
         total_score += score
+        total_possible += criterion_maximum
         criterion_feedback.append({
             'name': name,
             'points': criterion['points'],
             'score': format_score(score),
-            'feedback': match.group('feedback').strip(),
+            'feedback': response_criterion.feedback.strip(),
         })
 
-    return criterion_feedback, total_score
+    if total_possible <= 0:
+        raise ValueError('Rubric total points must be greater than zero.')
+
+    return criterion_feedback, total_score, total_possible
+
+
+def response_contains_refusal(response):
+    """Return whether a Responses API result includes a model refusal."""
+    for output_item in getattr(response, 'output', []) or []:
+        for content_item in getattr(output_item, 'content', []) or []:
+            if getattr(content_item, 'type', None) == 'refusal':
+                return True
+            if getattr(content_item, 'refusal', None):
+                return True
+    return False
 
 client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
@@ -182,6 +206,9 @@ def grade_paper():
 
     if not paper_text:
         return jsonify({'error': 'No paper text provided'}), 400
+
+    # A failed replacement submission must not leave an older report available.
+    last_grading_result.clear()
 
     try:
         word_count = len(paper_text.strip().split())
@@ -206,24 +233,26 @@ def grade_paper():
                 }
             ]
 
-        response = client.responses.create(
+        response = client.responses.parse(
             model='gpt-6-astra',
             reasoning={'effort': 'medium'},
-            input=messages
+            input=messages,
+            text_format=GradingEvaluation,
         )
 
-        evaluation = response.output_text
+        if getattr(response, 'status', 'completed') != 'completed':
+            raise ValueError('The grading response was incomplete. Please try again.')
 
-        # Parse overall feedback
-        feedback = ''
-        feedback_match = re.search(r'OVERALL FEEDBACK:\s*(.+?)(?=CRITERION FEEDBACK:|$)', evaluation, re.DOTALL)
-        if feedback_match:
-            feedback = feedback_match.group(1).strip()
+        evaluation = getattr(response, 'output_parsed', None)
+        if evaluation is None:
+            if response_contains_refusal(response):
+                raise ValueError('The grading request was refused. Please revise the submission and try again.')
+            raise ValueError('The grading response was incomplete. Please try again.')
 
-        criterion_feedback, total_score = parse_criterion_feedback(evaluation, rubric)
-        total_possible = Decimal(str(rubric['total_points']))
-        if total_possible <= 0:
-            raise ValueError('Rubric total points must be greater than zero.')
+        criterion_feedback, total_score, total_possible = validate_grading_evaluation(
+            evaluation, rubric
+        )
+        feedback = evaluation.overall_feedback.strip()
 
         rubric_total = f'{format_score(total_score)}/{format_score(total_possible)}'
         overall_grade = (total_score / total_possible) * Decimal('100')
@@ -249,8 +278,16 @@ def grade_paper():
             'criterion_feedback': criterion_feedback
         })
 
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    except APITimeoutError:
+        return jsonify({'error': 'The grading request timed out. Please try again.'}), 504
+    except APIError:
+        return jsonify({'error': 'The grading service could not complete the request. Please try again.'}), 502
+    except ValidationError:
+        return jsonify({'error': 'The grading response was malformed. Please try again.'}), 422
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 422
+    except Exception:
+        return jsonify({'error': 'Unable to complete grading. Please try again.'}), 500
 
 
 @app.route('/api/download-pdf', methods=['GET'])

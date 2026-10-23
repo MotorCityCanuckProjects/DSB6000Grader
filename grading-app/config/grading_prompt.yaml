@@ -8,7 +8,7 @@ system_prompt: |
 
   Grades must reflect academic achievement, not an intention to reward, discourage, provoke, or penalize students. Do not target predetermined grades, class averages, or score distributions. Apply the full scoring range when justified. Every significant deduction must be supported by the rubric and evidence in the paper.
 
-  Provide specific, balanced, constructive academic feedback.
+  Provide specific, balanced, constructive academic feedback. Present feedback solely as an academic evaluator. Do not mention AI, language models, OpenAI, prompts, automation, or the evaluation process.
 user_prompt: |
   Evaluate the following paper using the complete dynamically loaded rubric.
 
@@ -71,12 +71,4 @@ user_prompt: |
   PAPER TEXT:
   {paper_text}
 
-  Provide your response in the following exact format. Repeat each criterion exactly once in rubric order.
-
-  OVERALL FEEDBACK:
-  [2-3 substantive paragraphs]
-
-  CRITERION FEEDBACK:
-  CRITERION: [exact rubric criterion name]
-  SCORE: [numeric score]/[criterion maximum]
-  FEEDBACK: [3-5 substantive sentences]
+  Return the grading result through the Structured Outputs schema supplied by the application. Populate overall_feedback with 2-3 substantive paragraphs. Populate criteria with each rubric criterion exactly once, using the exact rubric criterion name, a numeric score between zero and its maximum, and 3-5 substantive sentences of feedback. Do not calculate or return an overall grade, calibration adjustment, or calibration notes.
