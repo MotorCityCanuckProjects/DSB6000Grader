@@ -1,10 +1,13 @@
 from flask import Flask, render_template, request, jsonify, send_file
 import yaml
 import os
-import re
+import math
+from pathlib import Path
 from io import BytesIO
 from datetime import datetime
-from openai import OpenAI
+from decimal import Decimal
+from openai import APIError, APITimeoutError, OpenAI
+from pydantic import BaseModel, ConfigDict, ValidationError
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
@@ -17,9 +20,176 @@ app = Flask(__name__)
 # Store last grading result for PDF generation
 last_grading_result = {}
 
+APP_DIR = Path(__file__).resolve().parent
+PROMPT_CONFIG_PATH = APP_DIR / 'config' / 'grading_prompt.yaml'
+
+
+class CriterionEvaluation(BaseModel):
+    """One rubric criterion returned by the model's structured response."""
+    model_config = ConfigDict(extra='forbid')
+
+    criterion_name: str
+    score: float
+    feedback: str
+
+
+class GradingEvaluation(BaseModel):
+    """Structured grading response requested from the OpenAI Responses API."""
+    model_config = ConfigDict(extra='forbid')
+
+    overall_feedback: str
+    criteria: list[CriterionEvaluation]
+
 def load_rubric():
-    with open('rubric.yaml', 'r') as f:
+    with (APP_DIR / 'rubric.yaml').open('r', encoding='utf-8') as f:
         return yaml.safe_load(f)
+
+
+def load_grading_prompts():
+    """Load and validate the active grading prompt configuration."""
+    try:
+        with PROMPT_CONFIG_PATH.open('r', encoding='utf-8') as f:
+            config = yaml.safe_load(f)
+    except FileNotFoundError as exc:
+        raise ValueError(
+            f'Grading prompt configuration file is missing: {PROMPT_CONFIG_PATH}'
+        ) from exc
+    except yaml.YAMLError as exc:
+        raise ValueError(
+            f'Grading prompt configuration is malformed: {exc}'
+        ) from exc
+    except OSError as exc:
+        raise ValueError(
+            f'Grading prompt configuration could not be read: {exc}'
+        ) from exc
+
+    if not isinstance(config, dict):
+        raise ValueError('Grading prompt configuration must contain a YAML mapping.')
+
+    required_fields = ('system_prompt', 'user_prompt')
+    missing_fields = [
+        field for field in required_fields
+        if not isinstance(config.get(field), str) or not config[field].strip()
+    ]
+    if missing_fields:
+        raise ValueError(
+            'Grading prompt configuration is missing required text field(s): '
+            + ', '.join(missing_fields)
+        )
+
+    required_placeholders = ('{criteria_list}', '{student_name}', '{paper_text}')
+    missing_placeholders = [
+        placeholder for placeholder in required_placeholders
+        if placeholder not in config['user_prompt']
+    ]
+    if missing_placeholders:
+        raise ValueError(
+            'Grading user prompt is missing required placeholder(s): '
+            + ', '.join(missing_placeholders)
+        )
+
+    return config['system_prompt'], config['user_prompt']
+
+
+def populate_grading_prompt(template, criteria_list, student_name, paper_text):
+    """Replace only known placeholders so literal braces in paper text remain unchanged."""
+    replacements = {
+        '{criteria_list}': criteria_list,
+        '{student_name}': student_name,
+        '{paper_text}': paper_text,
+    }
+    for placeholder, value in replacements.items():
+        template = template.replace(placeholder, value)
+    return template
+
+
+def format_score(score):
+    """Format whole and fractional rubric scores without unnecessary trailing zeros."""
+    if score == 0:
+        return '0'
+    formatted = format(score.normalize(), 'f')
+    return formatted.rstrip('0').rstrip('.') if '.' in formatted else formatted
+
+
+def validate_grading_evaluation(evaluation, rubric):
+    """Validate the model response against the authoritative YAML rubric."""
+    expected_criteria = {criterion['name']: criterion for criterion in rubric['criteria']}
+    expected_names = [criterion['name'] for criterion in rubric['criteria']]
+    parsed_names = [criterion.criterion_name for criterion in evaluation.criteria]
+
+    if not evaluation.overall_feedback.strip():
+        raise ValueError('Invalid grading response: overall feedback is missing.')
+
+    duplicate_names = sorted({name for name in parsed_names if parsed_names.count(name) > 1})
+    if duplicate_names:
+        raise ValueError(
+            'Invalid grading response: duplicate criterion score(s) for '
+            + ', '.join(duplicate_names)
+        )
+
+    unexpected_names = sorted(set(parsed_names) - set(expected_criteria))
+    if unexpected_names:
+        raise ValueError(
+            'Invalid grading response: unexpected criterion name(s): '
+            + ', '.join(unexpected_names)
+        )
+
+    missing_names = [name for name in expected_names if name not in parsed_names]
+    if missing_names:
+        raise ValueError(
+            'Invalid grading response: missing criterion score(s) for '
+            + ', '.join(missing_names)
+        )
+
+    if len(evaluation.criteria) != len(rubric['criteria']):
+        raise ValueError('Invalid grading response: each rubric criterion must appear exactly once.')
+
+    criteria_by_name = {criterion.criterion_name: criterion for criterion in evaluation.criteria}
+    criterion_feedback = []
+    total_score = Decimal('0')
+    total_possible = Decimal('0')
+    for name in expected_names:
+        criterion = expected_criteria[name]
+        response_criterion = criteria_by_name[name]
+        if not isinstance(response_criterion.score, (int, float)) or isinstance(response_criterion.score, bool):
+            raise ValueError(f'Invalid grading response: nonnumeric score for {name}.')
+        if not math.isfinite(response_criterion.score):
+            raise ValueError(f'Invalid grading response: nonfinite score for {name}.')
+        if not response_criterion.feedback.strip():
+            raise ValueError(f'Invalid grading response: feedback is missing for {name}.')
+
+        score = Decimal(str(response_criterion.score))
+        criterion_maximum = Decimal(str(criterion['points']))
+        if score < 0 or score > criterion_maximum:
+            raise ValueError(
+                f'Invalid grading response: score for {name} must be between 0 and '
+                f'{format_score(criterion_maximum)}.'
+            )
+
+        total_score += score
+        total_possible += criterion_maximum
+        criterion_feedback.append({
+            'name': name,
+            'points': criterion['points'],
+            'score': format_score(score),
+            'feedback': response_criterion.feedback.strip(),
+        })
+
+    if total_possible <= 0:
+        raise ValueError('Rubric total points must be greater than zero.')
+
+    return criterion_feedback, total_score, total_possible
+
+
+def response_contains_refusal(response):
+    """Return whether a Responses API result includes a model refusal."""
+    for output_item in getattr(response, 'output', []) or []:
+        for content_item in getattr(output_item, 'content', []) or []:
+            if getattr(content_item, 'type', None) == 'refusal':
+                return True
+            if getattr(content_item, 'refusal', None):
+                return True
+    return False
 
 client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
@@ -37,132 +207,25 @@ def grade_paper():
     if not paper_text:
         return jsonify({'error': 'No paper text provided'}), 400
 
-    word_count = len(paper_text.strip().split())
-    rubric = load_rubric()
-
-    criteria_list = '\n'.join([
-        f"- {c['name']} ({c['points']} points): {c['description']}"
-        for c in rubric['criteria']
-    ])
-
-    prompt = (
-        "You are a graduate-level data science professor grading a student paper using the provided rubric.\n"
-        "Your task is to evaluate the paper fairly, consistently, and in alignment with normal graduate-level grading standards. "
-        "Maintain rigor, but avoid excessive harshness.\n\n"
-
-        f"RUBRIC CRITERIA:\n{criteria_list}\n\n"
-
-        "GRADING PHILOSOPHY\n"
-        "- Strong papers that clearly meet the assignment and rubric expectations should receive high scores.\n"
-        "- Graduate work does not need to be perfect to earn excellent grades.\n"
-        "- If a criterion is clearly addressed with reasonable depth and accuracy, award a strong score.\n"
-        "- Minor weaknesses should result in small deductions only.\n"
-        "- Do not assume weaknesses unless they are clearly supported by the text of the paper.\n\n"
-
-        "GRADE RANGE CALIBRATION\n"
-        "Typical competent graduate-level papers that address the assignment well will generally fall in the 84-88 range.\n"
-        "Scores above 95 should be reserved for exceptional work that demonstrates outstanding insight or unusually strong analysis.\n"
-        "Scores below 82 should occur when the paper shows clear deficiencies, notable misunderstandings, or fails to address important rubric elements.\n\n"
-
-        "SCORING PRINCIPLES\n"
-        "For each rubric criterion:\n"
-        "1. Identify evidence in the paper that addresses the criterion.\n"
-        "2. Describe what the student did well.\n"
-        "3. Identify weaknesses only if they are clearly present in the text.\n"
-        "4. Assign a numeric score that reflects the overall quality of the work for that criterion.\n\n"
-
-        "NORMATIVE REFERENCE ANCHOR\n"
-        "Mentally compare this paper to the typical range of graduate-level data science papers submitted for similar assignments.\n"
-        "Use that comparison to judge whether the work is stronger than typical, typical, or weaker than typical before assigning scores.\n"
-        "This comparison should guide scoring so that papers of similar quality receive similar grades.\n\n"
-
-        "DEDUCTION RULES\n"
-        "- Deduct points only when a concrete weakness can be identified.\n"
-        "- Deductions should be proportional to the seriousness of the issue.\n"
-        "- Minor weaknesses should lead to small but meaningful deductions.\n"
-        "- Do not withhold high scores simply because the paper is not perfect.\n\n"
-
-        "CRITERION SCORE GUIDANCE\n"
-        "Use realistic clustering for criterion-level scoring:\n"
-        "92-100: Excellent or exceptional work for that criterion\n"
-        "85-91: Very strong performance with only minor weaknesses\n"
-        "78-84: Solid performance that clearly meets expectations\n"
-        "72-77: Acceptable but with noticeable limitations\n"
-        "Below 72: Significant weakness or insufficient treatment\n\n"
-
-        "COMPARATIVE QUALITY CHECK\n"
-        "First determine whether this paper is ABOVE AVERAGE, TYPICAL, or BELOW AVERAGE compared with graduate-level papers for this assignment.\n"
-        "Most papers will fall into the TYPICAL category, but stronger or weaker papers should be clearly distinguished.\n"
-        "Use the full grading range when warranted and do not cluster papers into the same score band unless their quality is genuinely similar.\n"
-        "Typical papers should often fall in the 84-88 range, but clearly stronger papers should receive higher grades and clearly weaker papers should receive lower grades.\n"
-        "After evaluating the rubric criteria, assess the paper's overall quality relative to typical graduate-level papers.\n"
-        "Assign the paper to one of these tiers:\n"
-        "Exceptional: 94-100 - Outstanding graduate-level work with unusual insight, depth, or sophistication\n"
-        "Excellent: 89-93 - Clearly stronger than typical graduate-level work\n"
-        "Very Good: 84-88 - Solid graduate-level work that meets expectations well\n"
-        "Good: 79-83 - Adequate work with noticeable limitations in depth, clarity, or analysis\n"
-        "Adequate: 74-78 - Meaningful weaknesses or uneven treatment of important rubric elements\n"
-        "Weak: below 74 - Major deficiencies, serious omissions, or substantial misunderstanding\n\n"
-
-        "FINAL CALIBRATION CHECK\n"
-        "Before finalizing the grade:\n"
-        "- Confirm that the score reflects the overall quality described in the feedback.\n"
-        "- Ensure deductions are proportional to the seriousness of weaknesses.\n"
-        "- Avoid grade inflation: typical competent graduate work should generally fall in the mid-to-high 80s.\n"
-        "- Also avoid score compression: papers that are meaningfully better or worse than typical should receive meaningfully different grades.\n"
-        "- If the score appears overly generous relative to the quality of the paper, adjust it downward modestly.\n"
-        "- If the score does not sufficiently distinguish this paper from clearly stronger or weaker work, adjust it accordingly.\n"
-        "- Do not default to the same score for many papers; ensure the score reflects the distinct quality of this paper.\n\n"
-
-        "ACADEMIC FEEDBACK STYLE\n"
-        "Write feedback as a professor who has carefully read the entire paper.\n"
-        "Where possible, quote or paraphrase specific arguments, passages, or examples from the student's paper when explaining strengths or weaknesses.\n"
-        "Avoid generic feedback phrases. Comments should clearly reference the student's actual reasoning, claims, evidence, or analysis.\n"
-        "Ensure that strengths and weaknesses are directly connected to the student's discussion and ethical analysis.\n\n"
-
-        "FEEDBACK EXPECTATIONS\n"
-        "- Provide balanced feedback highlighting strengths first.\n"
-        "- Clearly explain any significant deductions.\n"
-        "- Maintain a constructive and professional academic tone.\n\n"
-
-        f"PAPER SUBMITTED BY: {student_name}\n\n"
-        f"PAPER TEXT:\n{paper_text}\n\n"
-
-        "Provide your response in the following exact format:\n\n"
-
-        "OVERALL FEEDBACK:\n"
-        "[4-5 paragraphs of detailed overall feedback covering the paper's central argument, "
-        "quality and depth of ethical analysis, strength of evidence and research, "
-        "major strengths and weaknesses, and specific recommendations for improvement]\n\n"
-
-        "CRITERION FEEDBACK:\n"
-        "CRITERION: [name]\n"
-        "SCORE: [score]/[max points]\n"
-        "FEEDBACK: [5-6 sentences of detailed specific feedback including what the student did well, "
-        "any weaknesses clearly present in the text, specific examples or quotes, "
-        "and concrete suggestions for improvement]\n\n"
-
-        "CALIBRATION NOTES:\n"
-        "[2-3 sentences explaining the calibration tier assigned, why the final calibrated grade "
-        "was adjusted from the raw rubric total, and how the paper compares to typical graduate-level work]\n\n"
-
-        "FINAL CALIBRATED GRADE: [numeric grade out of 100]\n"
-
-    )
+    # A failed replacement submission must not leave an older report available.
+    last_grading_result.clear()
 
     try:
+        word_count = len(paper_text.strip().split())
+        rubric = load_rubric()
+        criteria_list = '\n'.join([
+            f"- {c['name']} ({c['points']} points): {c['description']}"
+            for c in rubric['criteria']
+        ])
+        system_prompt, user_prompt_template = load_grading_prompts()
+        prompt = populate_grading_prompt(
+            user_prompt_template, criteria_list, student_name, paper_text
+        )
+
         messages = [
                 {
                     'role': 'system',
-                    'content': (
-                        'You are an experienced graduate-level data science professor and academic evaluator. '
-                        'You grade papers fairly and consistently, holding students to high graduate-level standards '
-                        'without being excessively harsh. You provide detailed, balanced, and constructive feedback, '
-                        'highlighting strengths as well as areas for improvement. '
-                        'You cite specific evidence from the paper to support your evaluations and scores. '
-                        'You follow the grading rubric carefully and calibrate your final grade to reflect '
-                        'the true quality of the work relative to graduate-level expectations.'
-                    )
+                    'content': system_prompt
                 },
                 {
                     'role': 'user',
@@ -170,63 +233,37 @@ def grade_paper():
                 }
             ]
 
-        response = client.responses.create(
+        response = client.responses.parse(
             model='gpt-6-astra',
             reasoning={'effort': 'medium'},
-            input=messages
+            input=messages,
+            text_format=GradingEvaluation,
         )
 
-        evaluation = response.output_text
+        if getattr(response, 'status', 'completed') != 'completed':
+            raise ValueError('The grading response was incomplete. Please try again.')
 
-        # Parse overall feedback
-        feedback = ''
-        feedback_match = re.search(r'OVERALL FEEDBACK:\s*(.+?)(?=CRITERION FEEDBACK:|$)', evaluation, re.DOTALL)
-        if feedback_match:
-            feedback = feedback_match.group(1).strip()
+        evaluation = getattr(response, 'output_parsed', None)
+        if evaluation is None:
+            if response_contains_refusal(response):
+                raise ValueError('The grading request was refused. Please revise the submission and try again.')
+            raise ValueError('The grading response was incomplete. Please try again.')
 
-        # Parse criterion feedback and calculate rubric total
-        criterion_feedback = []
-        total_score = 0
-        for criterion in rubric['criteria']:
-            pattern = rf"CRITERION:\s*{re.escape(criterion['name'])}\s*SCORE:\s*(\d+)/{criterion['points']}\s*FEEDBACK:\s*(.+?)(?=CRITERION:|CALIBRATION NOTES:|FINAL CALIBRATED GRADE:|$)"
-            match = re.search(pattern, evaluation, re.DOTALL | re.IGNORECASE)
-            if match:
-                score = int(match.group(1))
-                crit_feedback = match.group(2).strip()
-            else:
-                score = round(criterion['points'] * 0.75)
-                crit_feedback = 'See overall feedback for details.'
+        criterion_feedback, total_score, total_possible = validate_grading_evaluation(
+            evaluation, rubric
+        )
+        feedback = evaluation.overall_feedback.strip()
 
-            total_score += score
-            criterion_feedback.append({
-                'name': criterion['name'],
-                'points': criterion['points'],
-                'score': score,
-                'feedback': crit_feedback
-            })
-
-        total_possible = rubric['total_points']
-        rubric_total = f'{total_score}/{total_possible}'
-
-        # Parse calibration notes
-        calibration_notes = ''
-        calibration_match = re.search(r'CALIBRATION NOTES:\s*(.+?)(?=FINAL CALIBRATED GRADE:|$)', evaluation, re.DOTALL | re.IGNORECASE)
-        if calibration_match:
-            calibration_notes = calibration_match.group(1).strip()
-
-        # Parse the final calibrated grade
-        calibrated_grade = None
-        calibrated_match = re.search(r'FINAL CALIBRATED GRADE:\s*([\d.]+)', evaluation, re.IGNORECASE)
-        if calibrated_match:
-            calibrated_grade = calibrated_match.group(1).strip()
+        rubric_total = f'{format_score(total_score)}/{format_score(total_possible)}'
+        overall_grade = (total_score / total_possible) * Decimal('100')
+        overall_grade_display = f'{format_score(overall_grade)} / 100'
 
         # Store result for PDF generation
         last_grading_result.update({
             'student_name': student_name,
             'word_count': word_count,
             'rubric_total': rubric_total,
-            'calibrated_grade': calibrated_grade,
-            'calibration_notes': calibration_notes,
+            'overall_grade': overall_grade_display,
             'feedback': feedback,
             'criterion_feedback': criterion_feedback,
             'timestamp': datetime.now().strftime('%B %d, %Y')
@@ -235,15 +272,22 @@ def grade_paper():
         return jsonify({
             'student_name': student_name,
             'word_count': word_count,
-            'grade': rubric_total,
-            'calibrated_grade': calibrated_grade,
-            'calibration_notes': calibration_notes,
+            'grade': overall_grade_display,
+            'rubric_total': rubric_total,
             'feedback': feedback,
             'criterion_feedback': criterion_feedback
         })
 
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    except APITimeoutError:
+        return jsonify({'error': 'The grading request timed out. Please try again.'}), 504
+    except APIError:
+        return jsonify({'error': 'The grading service could not complete the request. Please try again.'}), 502
+    except ValidationError:
+        return jsonify({'error': 'The grading response was malformed. Please try again.'}), 422
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 422
+    except Exception:
+        return jsonify({'error': 'Unable to complete grading. Please try again.'}), 500
 
 
 @app.route('/api/download-pdf', methods=['GET'])
@@ -339,8 +383,6 @@ def generate_pdf(buffer, data):
         ['Word Count:', f"{data['word_count']:,} words"],
         ['Rubric Total:', data['rubric_total']],
     ]
-    if data.get('calibrated_grade'):
-        info_data.append(['Calibrated Grade:', f"{data['calibrated_grade']} / 100"])
     info_table = Table(info_data, colWidths=[2 * inch, 4 * inch])
     info_table.setStyle(TableStyle([
         ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
@@ -353,10 +395,8 @@ def generate_pdf(buffer, data):
     elements.append(info_table)
     elements.append(Spacer(1, 0.2 * inch))
 
-    # Grade highlight box - use calibrated grade if available, else rubric total
-    display_grade = f"{data['calibrated_grade']} / 100" if data.get('calibrated_grade') else data['rubric_total']
-    grade_label = 'Final Calibrated Grade' if data.get('calibrated_grade') else 'Rubric Total Score'
-    grade_data = [[grade_label, display_grade]]
+    # Overall grade is calculated directly from the rubric criterion scores.
+    grade_data = [['Overall Grade', data['overall_grade']]]
     grade_table = Table(grade_data, colWidths=[3 * inch, 3 * inch])
     grade_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#1a1a2e')),
@@ -390,30 +430,6 @@ def generate_pdf(buffer, data):
             if para.strip():
                 elements.append(Paragraph(para.strip(), body_style))
         elements.append(Spacer(1, 0.05 * inch))
-
-    # Calibration notes and final grade at the bottom
-    elements.append(HRFlowable(width='100%', thickness=1, color=colors.HexColor('#cccccc')))
-    elements.append(Paragraph('Grade Calibration', heading_style))
-    if data.get('calibration_notes'):
-        for para in data['calibration_notes'].split('\n'):
-            if para.strip():
-                elements.append(Paragraph(para.strip(), body_style))
-    elements.append(Spacer(1, 0.15 * inch))
-
-    # Final calibrated grade box
-    if data.get('calibrated_grade'):
-        final_data = [['Final Calibrated Grade', f"{data['calibrated_grade']} / 100"]]
-        final_table = Table(final_data, colWidths=[3 * inch, 3 * inch])
-        final_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#0f3460')),
-            ('TEXTCOLOR', (0, 0), (-1, -1), colors.white),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, -1), 16),
-            ('TOPPADDING', (0, 0), (-1, -1), 14),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 14),
-        ]))
-        elements.append(final_table)
 
     doc.build(elements)
 
