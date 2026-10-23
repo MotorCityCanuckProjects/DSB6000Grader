@@ -316,7 +316,7 @@ button:disabled {
 /* Summary Cards */
 .results-summary {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 16px;
     margin-bottom: 28px;
 }
@@ -338,11 +338,6 @@ button:disabled {
     border-color: #0f3460;
 }
 
-.summary-card.highlight-calibrated {
-    background: linear-gradient(135deg, #1a6b3c, #145c32);
-    border-color: #1a6b3c;
-}
-
 .summary-label {
     font-size: 0.8em;
     font-weight: 600;
@@ -355,10 +350,6 @@ button:disabled {
     color: #a8c0e0;
 }
 
-.summary-card.highlight-calibrated .summary-label {
-    color: #a8e0c0;
-}
-
 .summary-value {
     font-size: 1.5em;
     font-weight: 700;
@@ -366,10 +357,6 @@ button:disabled {
 }
 
 .summary-card.highlight .summary-value {
-    color: #ffffff;
-}
-
-.summary-card.highlight-calibrated .summary-value {
     color: #ffffff;
 }
 

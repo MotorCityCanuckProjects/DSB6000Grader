@@ -45,11 +45,11 @@ user_prompt: |
   - Avoid disproportionate deductions for minor writing imperfections.
   - Avoid double-counting a deficiency unless it independently affects multiple criteria.
 
-  GRADE CALIBRATION
+  SCORING CONSISTENCY
   - Do not use a predetermined distribution or assumed average.
   - Do not artificially inflate or suppress scores.
   - Strong achievement earns strong scores; superficial or deficient work receives proportionately lower scores.
-  - Do not make an independent subjective adjustment to the overall grade.
+  - The application calculates the overall grade directly from the rubric scores; do not provide a separate overall grade.
 
   FEEDBACK REQUIREMENTS
   - Provide 2-3 substantive paragraphs of overall feedback.
@@ -61,10 +61,10 @@ user_prompt: |
   FAIRNESS AND RIGOR CHECK
   Before responding, confirm that analytical depth was evaluated appropriately; strengths received recognition; weaknesses and omissions were considered; deductions are supported and proportional; and the evaluation neither rewards buzzwords nor penalizes citation conventions. Correct criterion scores if they are overly generous or unnecessarily severe relative to the rubric.
 
-  FINAL GRADE
+  RUBRIC SCORES
   - Each criterion receives a numeric score between zero and its maximum.
-  - The final grade is based on total points earned relative to total rubric points, normalized to a 100-point scale when necessary.
-  - Do not independently adjust the final grade.
+  - The application calculates the final grade from total points earned relative to total rubric points, normalized to a 100-point scale when necessary.
+  - Do not independently adjust, estimate, or report a separate final grade.
 
   PAPER SUBMITTED BY: {student_name}
 
@@ -80,8 +80,3 @@ user_prompt: |
   CRITERION: [exact rubric criterion name]
   SCORE: [numeric score]/[criterion maximum]
   FEEDBACK: [3-5 substantive sentences]
-
-  CALIBRATION NOTES:
-  [2-3 sentences explaining how the rubric-derived grade reflects graduate-level expectations. No separate grade adjustment.]
-
-  FINAL CALIBRATED GRADE: [numeric grade out of 100]

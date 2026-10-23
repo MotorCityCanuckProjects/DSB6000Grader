@@ -5,6 +5,7 @@ import re
 from pathlib import Path
 from io import BytesIO
 from datetime import datetime
+from decimal import Decimal, InvalidOperation
 from openai import OpenAI
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -83,6 +84,89 @@ def populate_grading_prompt(template, criteria_list, student_name, paper_text):
         template = template.replace(placeholder, value)
     return template
 
+
+def format_score(score):
+    """Format whole and fractional rubric scores without unnecessary trailing zeros."""
+    if score == 0:
+        return '0'
+    formatted = format(score.normalize(), 'f')
+    return formatted.rstrip('0').rstrip('.') if '.' in formatted else formatted
+
+
+def parse_criterion_feedback(evaluation, rubric):
+    """Validate rubric scores and feedback from the model's plain-text response."""
+    pattern = re.compile(
+        r'CRITERION:\s*(?P<name>.+?)\s*\n'
+        r'SCORE:\s*(?P<score>[^\s/]+)\s*/\s*(?P<maximum>[^\s]+)\s*\n'
+        r'FEEDBACK:\s*(?P<feedback>.+?)(?=\n\s*CRITERION:|\Z)',
+        re.DOTALL | re.IGNORECASE,
+    )
+    matches = list(pattern.finditer(evaluation))
+    expected_criteria = {criterion['name']: criterion for criterion in rubric['criteria']}
+    expected_names = [criterion['name'] for criterion in rubric['criteria']]
+    parsed_names = [match.group('name').strip() for match in matches]
+
+    duplicate_names = sorted({name for name in parsed_names if parsed_names.count(name) > 1})
+    if duplicate_names:
+        raise ValueError(
+            'Invalid grading response: duplicate criterion score(s) for '
+            + ', '.join(duplicate_names)
+        )
+
+    unexpected_names = sorted(set(parsed_names) - set(expected_criteria))
+    if unexpected_names:
+        raise ValueError(
+            'Invalid grading response: unexpected criterion name(s): '
+            + ', '.join(unexpected_names)
+        )
+
+    missing_names = [name for name in expected_names if name not in parsed_names]
+    if missing_names:
+        raise ValueError(
+            'Invalid grading response: missing criterion score(s) for '
+            + ', '.join(missing_names)
+        )
+
+    if len(matches) != len(rubric['criteria']):
+        raise ValueError('Invalid grading response: each rubric criterion must appear exactly once.')
+    if parsed_names != expected_names:
+        raise ValueError('Invalid grading response: rubric criteria must appear in rubric order.')
+
+    criterion_feedback = []
+    total_score = Decimal('0')
+    for match in matches:
+        name = match.group('name').strip()
+        criterion = expected_criteria[name]
+        try:
+            score = Decimal(match.group('score'))
+            response_maximum = Decimal(match.group('maximum'))
+        except InvalidOperation as exc:
+            raise ValueError(f'Invalid grading response: nonnumeric score for {name}.') from exc
+
+        criterion_maximum = Decimal(str(criterion['points']))
+        if not score.is_finite() or not response_maximum.is_finite():
+            raise ValueError(f'Invalid grading response: nonnumeric score for {name}.')
+        if response_maximum != criterion_maximum:
+            raise ValueError(
+                f'Invalid grading response: maximum score for {name} must be '
+                f'{format_score(criterion_maximum)}.'
+            )
+        if score < 0 or score > criterion_maximum:
+            raise ValueError(
+                f'Invalid grading response: score for {name} must be between 0 and '
+                f'{format_score(criterion_maximum)}.'
+            )
+
+        total_score += score
+        criterion_feedback.append({
+            'name': name,
+            'points': criterion['points'],
+            'score': format_score(score),
+            'feedback': match.group('feedback').strip(),
+        })
+
+    return criterion_feedback, total_score
+
 client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
 @app.route('/')
@@ -136,49 +220,21 @@ def grade_paper():
         if feedback_match:
             feedback = feedback_match.group(1).strip()
 
-        # Parse criterion feedback and calculate rubric total
-        criterion_feedback = []
-        total_score = 0
-        for criterion in rubric['criteria']:
-            pattern = rf"CRITERION:\s*{re.escape(criterion['name'])}\s*SCORE:\s*(\d+)/{criterion['points']}\s*FEEDBACK:\s*(.+?)(?=CRITERION:|CALIBRATION NOTES:|FINAL CALIBRATED GRADE:|$)"
-            match = re.search(pattern, evaluation, re.DOTALL | re.IGNORECASE)
-            if match:
-                score = int(match.group(1))
-                crit_feedback = match.group(2).strip()
-            else:
-                score = round(criterion['points'] * 0.75)
-                crit_feedback = 'See overall feedback for details.'
+        criterion_feedback, total_score = parse_criterion_feedback(evaluation, rubric)
+        total_possible = Decimal(str(rubric['total_points']))
+        if total_possible <= 0:
+            raise ValueError('Rubric total points must be greater than zero.')
 
-            total_score += score
-            criterion_feedback.append({
-                'name': criterion['name'],
-                'points': criterion['points'],
-                'score': score,
-                'feedback': crit_feedback
-            })
-
-        total_possible = rubric['total_points']
-        rubric_total = f'{total_score}/{total_possible}'
-
-        # Parse calibration notes
-        calibration_notes = ''
-        calibration_match = re.search(r'CALIBRATION NOTES:\s*(.+?)(?=FINAL CALIBRATED GRADE:|$)', evaluation, re.DOTALL | re.IGNORECASE)
-        if calibration_match:
-            calibration_notes = calibration_match.group(1).strip()
-
-        # Parse the final calibrated grade
-        calibrated_grade = None
-        calibrated_match = re.search(r'FINAL CALIBRATED GRADE:\s*([\d.]+)', evaluation, re.IGNORECASE)
-        if calibrated_match:
-            calibrated_grade = calibrated_match.group(1).strip()
+        rubric_total = f'{format_score(total_score)}/{format_score(total_possible)}'
+        overall_grade = (total_score / total_possible) * Decimal('100')
+        overall_grade_display = f'{format_score(overall_grade)} / 100'
 
         # Store result for PDF generation
         last_grading_result.update({
             'student_name': student_name,
             'word_count': word_count,
             'rubric_total': rubric_total,
-            'calibrated_grade': calibrated_grade,
-            'calibration_notes': calibration_notes,
+            'overall_grade': overall_grade_display,
             'feedback': feedback,
             'criterion_feedback': criterion_feedback,
             'timestamp': datetime.now().strftime('%B %d, %Y')
@@ -187,9 +243,8 @@ def grade_paper():
         return jsonify({
             'student_name': student_name,
             'word_count': word_count,
-            'grade': rubric_total,
-            'calibrated_grade': calibrated_grade,
-            'calibration_notes': calibration_notes,
+            'grade': overall_grade_display,
+            'rubric_total': rubric_total,
             'feedback': feedback,
             'criterion_feedback': criterion_feedback
         })
@@ -291,8 +346,6 @@ def generate_pdf(buffer, data):
         ['Word Count:', f"{data['word_count']:,} words"],
         ['Rubric Total:', data['rubric_total']],
     ]
-    if data.get('calibrated_grade'):
-        info_data.append(['Calibrated Grade:', f"{data['calibrated_grade']} / 100"])
     info_table = Table(info_data, colWidths=[2 * inch, 4 * inch])
     info_table.setStyle(TableStyle([
         ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
@@ -305,10 +358,8 @@ def generate_pdf(buffer, data):
     elements.append(info_table)
     elements.append(Spacer(1, 0.2 * inch))
 
-    # Grade highlight box - use calibrated grade if available, else rubric total
-    display_grade = f"{data['calibrated_grade']} / 100" if data.get('calibrated_grade') else data['rubric_total']
-    grade_label = 'Final Calibrated Grade' if data.get('calibrated_grade') else 'Rubric Total Score'
-    grade_data = [[grade_label, display_grade]]
+    # Overall grade is calculated directly from the rubric criterion scores.
+    grade_data = [['Overall Grade', data['overall_grade']]]
     grade_table = Table(grade_data, colWidths=[3 * inch, 3 * inch])
     grade_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#1a1a2e')),
@@ -342,30 +393,6 @@ def generate_pdf(buffer, data):
             if para.strip():
                 elements.append(Paragraph(para.strip(), body_style))
         elements.append(Spacer(1, 0.05 * inch))
-
-    # Calibration notes and final grade at the bottom
-    elements.append(HRFlowable(width='100%', thickness=1, color=colors.HexColor('#cccccc')))
-    elements.append(Paragraph('Grade Calibration', heading_style))
-    if data.get('calibration_notes'):
-        for para in data['calibration_notes'].split('\n'):
-            if para.strip():
-                elements.append(Paragraph(para.strip(), body_style))
-    elements.append(Spacer(1, 0.15 * inch))
-
-    # Final calibrated grade box
-    if data.get('calibrated_grade'):
-        final_data = [['Final Calibrated Grade', f"{data['calibrated_grade']} / 100"]]
-        final_table = Table(final_data, colWidths=[3 * inch, 3 * inch])
-        final_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#0f3460')),
-            ('TEXTCOLOR', (0, 0), (-1, -1), colors.white),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, -1), 16),
-            ('TOPPADDING', (0, 0), (-1, -1), 14),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 14),
-        ]))
-        elements.append(final_table)
 
     doc.build(elements)
 
